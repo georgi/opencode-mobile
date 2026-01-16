@@ -1,0 +1,68 @@
+__pycache__
+*.pyc
+*.pyo
+*.dmypy.json
+*.jar
+.mypy_cache
+*.egg-info
+*.egg
+*.pth
+*.torchscript
+*.ckpt
+*.gguf
+*.pt
+*.pth
+*.safetensors
+build/
+coverage/
+dist/
+electron/dist/
+electron/dist-web/
+electron/dist-electron/
+electron/resources/micromamba
+electron/resources/environment-*.yml
+electron/resources/environment.lock.yml
+conda-lock.yml
+# Temporary build files
+.tmp/
+__notebooks/
+package/
+postgres_data/
+.ipynb_checkpoints
+.huggingface
+.expo
+
+.bin
+.claude
+.vite
+.venv
+node_modules
+docs.chromadb
+
+# Cache
+.cache
+.eslintcache
+
+# Testing
+/coverage
+*.lcov
+playwright-report/
+test-results/
+.last-run.json
+
+# Environment variables
+*.override.env
+
+# macOS
+# https://github.com/github/gitignore/blob/master/Global/macOS.gitignore
+.DS_Store
+
+.env
+cert.pem
+key.pem
+.aider*
+
+# Dev
+.codegpt
+__plans__
+.claude/settings.local.json

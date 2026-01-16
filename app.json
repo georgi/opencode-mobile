@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "Expo Touch Client",
+    "slug": "expo-client",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "platforms": ["ios", "android", "web"],
+    "jsEngine": "hermes"
+  }
+}

@@ -1,0 +1,113 @@
+---
+title: Expo PRD
+description: Requirements for OpenCode touch-first experience
+---
+
+This PRD outlines an Expo client aligned with the web UI.
+
+---
+
+## Define goals
+
+- Deliver a fast, touch-first session experience with parity to core web flows.
+- Make server picking, project access, and sharing quick and reliable.
+- Keep model, agent, and permission actions one tap away.
+
+---
+
+## Set non-goals
+
+- No full IDE editor or local file editing on-device.
+- No server installation, update, or CLI management.
+- No offline creation or sync of session data.
+
+---
+
+## Identify audience
+
+- Developers reviewing sessions away from their desk.
+- Contributors starting or resuming work from mobile.
+- Leads approving changes and handling permissions quickly.
+
+---
+
+## Outline flows
+
+- Choose server, open a project, select worktree, start a session.
+- Send prompts with files, images, slash commands, and agents.
+- Review diffs, accept or undo changes, and share the session.
+- Respond to permission or question prompts from notifications.
+
+---
+
+## Map navigation
+
+- Use a bottom tab bar: Projects, Sessions, Notifications, Settings.
+- Use a stack for drill-down: Project → Session list → Session detail.
+- Use a segmented control inside a session for Session and Review.
+
+Screens
+
+- Home/projects
+- Sessions list
+- Session detail
+- Review/changes
+- Settings/server
+- Model/agent selection
+- Permissions
+- Share
+
+---
+
+## Detail screens
+
+- **Home/projects**: show recent projects and a server dropdown driven by Settings; selecting a server persists and auto-loads projects.
+- **Sessions list**: auto-load sessions for the selected project only; show unread badges and quick resume; list is virtualized.
+- **Session detail**: show a virtualized message stream that lands at the latest messages immediately (no long scroll animation), prompt input, attachments strip, and a floating stop/undo bar.
+- **Review/changes**: auto-load diffs; show loading/progress state, explicit empty state, unified diffs, jump-to-file list, and a single apply action.
+- **Settings/server**: manage persistent server configs (add/edit/remove), server status, environment details, and recent servers.
+- **Model/agent selection**: show provider icons, current model, and agent descriptions in a sheet.
+- **Permissions**: show pending requests, once/always/reject buttons, and session context.
+- **Share**: show share toggle, link copy, and expiration controls.
+
+---
+
+## Specify integrations
+
+- Create SDK client with `createOpencodeClient` using server base URL, directory, and Basic Auth header.
+- Create sessions with `client.session.create` and send prompts with `client.session.prompt`.
+- Abort, undo, redo with `client.session.abort`, `client.session.revert`, `client.session.unrevert`.
+- Generate summaries and diffs via `client.session.summarize` and `client.session.diff`.
+- Share sessions with `client.session.share` and load history with `client.session.messages`.
+- Create worktrees with `client.worktree.create` and switch directories per session.
+- Respond to permissions with `client.permission.respond` and questions with `client.question.reply`.
+- Subscribe to events with `sdk.event.listen` for status, permissions, and session update notifications.
+
+---
+
+## Handle states
+
+- Offline: show offline status and disable send actions (no read-only cache).
+- Server unavailable: show health badge, retry, and change server CTA.
+- Permission required: show push notification and in-app banner.
+- Long lists: projects/sessions/messages use virtualized lists to avoid large renders.
+- Long conversations: open at the latest messages without long scroll animation; show a "jump to latest" affordance when user is not at bottom.
+- Diff loading: show a visible loading state and explicit empty state ("No changes") for the review panel.
+- Images and files: show upload progress and type validation.
+
+---
+
+## Measure success
+
+- 80% of mobile sessions send a prompt within two minutes.
+- <2% of sessions fail due to server or permission errors.
+- 30% of shared sessions are opened from mobile.
+
+---
+
+## List questions
+
+- Confirm Basic Auth credential storage and rotation UX.
+- Should session update notifications include diffs or just status.
+- Do we need a secure in-app auth prompt for new servers.
+- Should share links require re-auth on open.
