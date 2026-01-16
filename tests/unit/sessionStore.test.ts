@@ -1,4 +1,4 @@
-import type { FileDiff, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client"
+import type { FileDiff, Message, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client"
 import { useSessionStore } from "../../src/store/sessionStore"
 
 const createSession = (): Session => ({
@@ -136,5 +136,63 @@ describe("sessionStore", () => {
       sessionID: "session-1",
       directory: "/repo",
     })
+  })
+
+  it("keeps messages sorted newest-first", () => {
+    const createAssistantMessage = (id: string, created: number): Message => ({
+      id,
+      sessionID: "session-1",
+      role: "assistant",
+      time: { created },
+      agent: "",
+      modelID: "model",
+      providerID: "provider",
+      mode: "chat",
+      parentID: "root",
+      path: {
+        cwd: "/repo",
+        root: "/repo",
+      },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+      },
+    })
+
+    const olderMessage = createAssistantMessage("msg-older", 1000)
+    const newerMessage = createAssistantMessage("msg-newer", 2000)
+
+    useSessionStore.getState().setMessages([olderMessage, newerMessage])
+    expect(useSessionStore.getState().messages.map((item) => item.id)).toEqual([
+      "msg-newer",
+      "msg-older",
+    ])
+
+    const latestMessage = createAssistantMessage("msg-latest", 3000)
+
+    useSessionStore.getState().appendMessage(latestMessage)
+    expect(useSessionStore.getState().messages.map((item) => item.id)).toEqual([
+      "msg-latest",
+      "msg-newer",
+      "msg-older",
+    ])
+
+    const updatedOlderMessage = {
+      ...olderMessage,
+      time: { created: 4000 },
+    }
+
+    useSessionStore.getState().appendMessage(updatedOlderMessage)
+    expect(useSessionStore.getState().messages.map((item) => item.id)).toEqual([
+      "msg-older",
+      "msg-latest",
+      "msg-newer",
+    ])
   })
 })

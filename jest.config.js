@@ -4,5 +4,6 @@ module.exports = {
   testMatch: ["**/tests/**/*.test.ts?(x)"],
   moduleNameMapper: {
     "^@opencode-ai/sdk/v2/client$": "<rootDir>/tests/__mocks__/opencode-sdk-client.ts",
+    "^react-native/Libraries/Animated/NativeAnimatedHelper$": "<rootDir>/tests/__mocks__/nativeAnimatedHelper.ts",
   },
 }

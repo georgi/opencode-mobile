@@ -121,6 +121,21 @@ const resolveData = <TData>(result: ResultFields<TData>) => {
   return result.data
 }
 
+const getMessageTimestamp = (message: Message) => message.time?.created ?? 0
+
+const sortMessages = (messages: Message[]) =>
+  [...messages].sort((a, b) => getMessageTimestamp(b) - getMessageTimestamp(a))
+
+const upsertMessage = (messages: Message[], message: Message) => {
+  const index = messages.findIndex((item) => item.id === message.id)
+  if (index === -1) {
+    return sortMessages([message, ...messages])
+  }
+  const next = [...messages]
+  next[index] = message
+  return sortMessages(next)
+}
+
 export const useSessionStore = create<SessionState & SessionActions>((set, get) => {
   const ensureClient = () => {
     const { client, isOffline } = get()
@@ -165,15 +180,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       }
       case "message.updated": {
         const message = event.properties.info
-        set((state) => {
-          const index = state.messages.findIndex((item) => item.id === message.id)
-          if (index === -1) {
-            return { messages: [...state.messages, message] }
-          }
-          const next = [...state.messages]
-          next[index] = message
-          return { messages: next }
-        })
+        set((state) => ({ messages: upsertMessage(state.messages, message) }))
         break
       }
       case "permission.asked": {
@@ -349,10 +356,10 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     setProject: (project) => set({ currentProject: project }),
     setSession: (session) => set({ currentSession: session }),
     setSessions: (sessions) => set({ sessions }),
-    setMessages: (messages) => set({ messages }),
+    setMessages: (messages) => set({ messages: sortMessages(messages) }),
     setMessageParts: (parts) => set({ messageParts: parts }),
     appendMessage: (message) =>
-      set((state) => ({ messages: [...state.messages, message] })),
+      set((state) => ({ messages: upsertMessage(state.messages, message) })),
     setDiffs: (diffs) => set({ diffs }),
     setDiffLoading: (isDiffsLoading, diffsError) =>
       set({ isDiffsLoading, diffsError }),
@@ -361,7 +368,16 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     setOffline: (isOffline) => set({ isOffline }),
     setError: (error) => set({ lastError: error }),
     clearError: () => set({ lastError: undefined }),
-    reset: () => set({ ...initialSessionState }),
+    reset: () => set({
+      ...initialSessionState,
+      client: undefined,
+      currentServerId: undefined,
+      currentServer: undefined,
+      currentProject: undefined,
+      currentSession: undefined,
+      lastError: undefined,
+      diffsError: undefined,
+    }),
     initializeClient: (server) => {
       const client = createSdkClient({
         baseUrl: server.baseUrl,
@@ -458,7 +474,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       } as Message
 
       set((state) => ({
-        messages: [...state.messages, userMessage],
+        messages: upsertMessage(state.messages, userMessage),
         lastError: undefined,
       }))
 
@@ -484,7 +500,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         for (const item of messagesData) {
           messageParts[item.info.id] = item.parts
         }
-        set({ messages, messageParts, lastError: undefined })
+        set({ messages: sortMessages(messages), messageParts, lastError: undefined })
       }
     },
     fetchMessages: async (sessionId) => {
@@ -507,8 +523,9 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       for (const item of data) {
         messageParts[item.info.id] = item.parts
       }
-      set({ messages, messageParts, lastError: undefined })
-      return messages
+      const sortedMessages = sortMessages(messages)
+      set({ messages: sortedMessages, messageParts, lastError: undefined })
+      return sortedMessages
     },
     abortSession: async (sessionId) => {
       const client = ensureClient()

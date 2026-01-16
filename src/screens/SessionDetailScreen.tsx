@@ -9,7 +9,7 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native"
-import { FlashList } from "@shopify/flash-list"
+import { FlashList, type FlashListRef } from "@shopify/flash-list"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import type { RouteProp } from "@react-navigation/native"
@@ -127,7 +127,7 @@ export default function SessionDetailScreen() {
   const [isSending, setIsSending] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
-  const flatListRef = useRef<FlashList<Message>>(null)
+  const flatListRef = useRef<FlashListRef<Message>>(null)
 
   useEffect(() => {
     if (sessionId) {
@@ -204,14 +204,12 @@ export default function SessionDetailScreen() {
           <>
               <FlashList
                 ref={flatListRef}
-                data={[...messages].reverse()}
+                data={messages}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <MessageBubble message={item} parts={messageParts[item.id] ?? []} />
                 )}
                 contentContainerStyle={styles.messagesList}
-                inverted
-                estimatedItemSize={140}
                 onScroll={(event) => {
                   const offsetY = event.nativeEvent.contentOffset.y
                   setIsAtBottom(offsetY < 32)
