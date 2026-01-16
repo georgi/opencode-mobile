@@ -12,6 +12,13 @@ import type {
   TextPartInput,
 } from "@opencode-ai/sdk/v2/client"
 import { createSdkClient } from "../sdk/client"
+import {
+  deleteServerSecrets,
+  loadCurrentServerId,
+  loadServers,
+  saveCurrentServerId,
+  saveServers,
+} from "../storage/serverStorage"
 
 export type ServerConfig = {
   id: string
@@ -23,13 +30,19 @@ export type ServerConfig = {
 
 export type SessionState = {
   client?: OpencodeClient
+
+  servers: ServerConfig[]
+  currentServerId?: string
   currentServer?: ServerConfig
+
   currentProject?: Project
   currentSession?: Session
   sessions: Session[]
   messages: Message[]
   messageParts: Record<string, Part[]>
   diffs: FileDiff[]
+  isDiffsLoading: boolean
+  diffsError?: string
   projects: Project[]
   pendingPermissions: PermissionRequest[]
   isOffline: boolean
@@ -37,16 +50,25 @@ export type SessionState = {
 }
 
 export const initialSessionState: SessionState = {
+  servers: [],
   sessions: [],
   messages: [],
   messageParts: {},
   diffs: [],
+  isDiffsLoading: false,
   projects: [],
   pendingPermissions: [],
   isOffline: false,
 }
 
 type SessionActions = {
+  hydrateServers: () => Promise<void>
+
+  upsertServer: (server: ServerConfig) => Promise<void>
+  removeServer: (serverId: string) => Promise<void>
+
+  selectServer: (serverId?: string) => Promise<void>
+
   setServer: (server?: ServerConfig) => void
   setProject: (project?: Project) => void
   setSession: (session?: Session) => void
@@ -55,7 +77,9 @@ type SessionActions = {
   setMessageParts: (parts: Record<string, Part[]>) => void
   appendMessage: (message: Message) => void
   setDiffs: (diffs: FileDiff[]) => void
+  setDiffLoading: (isDiffsLoading: boolean, diffsError?: string) => void
   setProjects: (projects: Project[]) => void
+
   setPendingPermissions: (permissions: PermissionRequest[]) => void
   setOffline: (isOffline: boolean) => void
   setError: (error?: string) => void
@@ -173,9 +197,10 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         break
       }
       case "session.diff": {
-        set({ diffs: event.properties.diff })
+        set({ diffs: event.properties.diff, isDiffsLoading: false, diffsError: undefined })
         break
       }
+
       default:
         break
     }
@@ -183,6 +208,143 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
   return {
     ...initialSessionState,
+
+    hydrateServers: async () => {
+      const servers = await loadServers()
+      const currentServerId = await loadCurrentServerId()
+      const currentServer = currentServerId
+        ? servers.find((server) => server.id === currentServerId)
+        : undefined
+
+      set({ servers, currentServerId, currentServer })
+
+      if (currentServer) {
+        get().initializeClient(currentServer)
+      }
+    },
+
+    upsertServer: async (server) => {
+      const previousCurrentServer = get().currentServer
+
+      set((state) => {
+        const nextServers = state.servers.some((item) => item.id === server.id)
+          ? state.servers.map((item) => (item.id === server.id ? server : item))
+          : [server, ...state.servers]
+
+        const currentServerId = state.currentServerId ?? server.id
+        const currentServer =
+          currentServerId === server.id
+            ? server
+            : state.currentServer ?? state.servers.find((item) => item.id === currentServerId)
+
+        return {
+          servers: nextServers,
+          currentServerId,
+          currentServer,
+        }
+      })
+
+      const { servers } = get()
+      await saveServers(servers)
+
+      const { currentServerId } = get()
+      await saveCurrentServerId(currentServerId)
+
+      const nextCurrentServer = get().currentServer
+      const didConnectionChange =
+        !!previousCurrentServer &&
+        !!nextCurrentServer &&
+        previousCurrentServer.id === nextCurrentServer.id &&
+        (previousCurrentServer.baseUrl !== nextCurrentServer.baseUrl ||
+          previousCurrentServer.directory !== nextCurrentServer.directory ||
+          previousCurrentServer.basicAuth !== nextCurrentServer.basicAuth)
+
+      if (nextCurrentServer && didConnectionChange) {
+        set({
+          client: undefined,
+          currentProject: undefined,
+          currentSession: undefined,
+          sessions: [],
+          messages: [],
+          messageParts: {},
+          diffs: [],
+          isDiffsLoading: false,
+          diffsError: undefined,
+          projects: [],
+        })
+
+        get().initializeClient(nextCurrentServer)
+      }
+
+      if (nextCurrentServer && previousCurrentServer?.id !== nextCurrentServer.id) {
+        get().initializeClient(nextCurrentServer)
+      }
+    },
+
+    removeServer: async (serverId) => {
+      const previousCurrentId = get().currentServerId
+
+      set((state) => {
+        const nextServers = state.servers.filter((server) => server.id !== serverId)
+        const isCurrent = state.currentServerId === serverId
+        const nextCurrent = isCurrent ? nextServers[0] : state.currentServer
+
+        return {
+          servers: nextServers,
+          currentServerId: isCurrent ? nextCurrent?.id : state.currentServerId,
+          currentServer: nextCurrent,
+          client: isCurrent ? undefined : state.client,
+          currentProject: isCurrent ? undefined : state.currentProject,
+          currentSession: isCurrent ? undefined : state.currentSession,
+          sessions: isCurrent ? [] : state.sessions,
+          messages: isCurrent ? [] : state.messages,
+          messageParts: isCurrent ? {} : state.messageParts,
+          diffs: isCurrent ? [] : state.diffs,
+          isDiffsLoading: isCurrent ? false : state.isDiffsLoading,
+          diffsError: isCurrent ? undefined : state.diffsError,
+          projects: isCurrent ? [] : state.projects,
+        }
+      })
+
+      await deleteServerSecrets(serverId)
+      await saveServers(get().servers)
+
+      const currentServerId = get().currentServerId
+      await saveCurrentServerId(currentServerId)
+
+      const currentServer = get().currentServer
+      if (previousCurrentId === serverId && currentServer) {
+        get().initializeClient(currentServer)
+      }
+    },
+
+    selectServer: async (serverId) => {
+      const next = serverId
+        ? get().servers.find((server) => server.id === serverId)
+        : undefined
+
+      set({
+        currentServerId: next?.id,
+        currentServer: next,
+        client: undefined,
+        currentProject: undefined,
+        currentSession: undefined,
+        sessions: [],
+        messages: [],
+        messageParts: {},
+        diffs: [],
+        isDiffsLoading: false,
+        diffsError: undefined,
+        projects: [],
+      })
+
+      await saveCurrentServerId(next?.id)
+
+      if (next) {
+        get().initializeClient(next)
+      }
+    },
+
     setServer: (server) => set({ currentServer: server }),
     setProject: (project) => set({ currentProject: project }),
     setSession: (session) => set({ currentSession: session }),
@@ -192,6 +354,8 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     appendMessage: (message) =>
       set((state) => ({ messages: [...state.messages, message] })),
     setDiffs: (diffs) => set({ diffs }),
+    setDiffLoading: (isDiffsLoading, diffsError) =>
+      set({ isDiffsLoading, diffsError }),
     setProjects: (projects) => set({ projects }),
     setPendingPermissions: (permissions) => set({ pendingPermissions: permissions }),
     setOffline: (isOffline) => set({ isOffline }),
@@ -232,8 +396,13 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentServer?.directory
-      const result = await client.session.list({ directory })
+      const currentProject = get().currentProject
+      if (!currentProject?.worktree) {
+        set({ lastError: "ERR INVALID COMMAND" })
+        return undefined
+      }
+
+      const result = await client.session.list({ directory: currentProject.worktree })
       const sessions = resolveData(result)
 
       if (!sessions) {
@@ -403,16 +572,18 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
+      set({ isDiffsLoading: true, diffsError: undefined })
+
       const directory = get().currentServer?.directory
       const result = await client.session.diff({ sessionID: sessionId, directory })
       const diffs = resolveData(result)
 
       if (!diffs) {
-        set({ lastError: "ERR SERVER UNAVAILABLE" })
+        set({ lastError: "ERR SERVER UNAVAILABLE", isDiffsLoading: false, diffsError: "ERR SERVER UNAVAILABLE" })
         return undefined
       }
 
-      set({ diffs, lastError: undefined })
+      set({ diffs, lastError: undefined, isDiffsLoading: false, diffsError: undefined })
       return diffs
     },
     summarizeSession: async (sessionId) => {

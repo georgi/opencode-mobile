@@ -5,17 +5,17 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from "react-native"
+import { FlashList } from "@shopify/flash-list"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import type { RouteProp } from "@react-navigation/native"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
-import type { Message, Part, ReasoningPart, ToolPart, TextPart } from "../../types.gen"
+import type { Message, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2/client"
 
 function formatTimestamp(timestamp: number): string {
   const date = new Date(timestamp)
@@ -126,7 +126,8 @@ export default function SessionDetailScreen() {
   const [inputText, setInputText] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const flatListRef = useRef<FlatList>(null)
+  const [isAtBottom, setIsAtBottom] = useState(true)
+  const flatListRef = useRef<FlashList<Message>>(null)
 
   useEffect(() => {
     if (sessionId) {
@@ -152,12 +153,12 @@ export default function SessionDetailScreen() {
   }
 
   useEffect(() => {
-    if (messages.length > 0 && flatListRef.current) {
+    if (messages.length > 0 && flatListRef.current && isAtBottom) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true })
       }, 100)
     }
-  }, [messages.length])
+  }, [messages.length, isAtBottom])
 
   return (
     <KeyboardAvoidingView
@@ -200,18 +201,32 @@ export default function SessionDetailScreen() {
             </Text>
           </View>
         ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <MessageBubble message={item} parts={messageParts[item.id] ?? []} />
-            )}
-            contentContainerStyle={styles.messagesList}
-            onContentSizeChange={() =>
-              flatListRef.current?.scrollToEnd({ animated: true })
-            }
-          />
+          <>
+              <FlashList
+                ref={flatListRef}
+                data={[...messages].reverse()}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <MessageBubble message={item} parts={messageParts[item.id] ?? []} />
+                )}
+                contentContainerStyle={styles.messagesList}
+                inverted
+                estimatedItemSize={140}
+                onScroll={(event) => {
+                  const offsetY = event.nativeEvent.contentOffset.y
+                  setIsAtBottom(offsetY < 32)
+                }}
+              />
+
+            {!isAtBottom ? (
+              <Pressable
+                style={styles.jumpToLatest}
+                onPress={() => flatListRef.current?.scrollToEnd({ animated: false })}
+              >
+                <Text style={styles.jumpToLatestText}>Jump to latest</Text>
+              </Pressable>
+            ) : null}
+          </>
         )}
       </View>
 
@@ -336,6 +351,20 @@ const styles = StyleSheet.create({
   messagesList: {
     padding: 16,
     gap: 12,
+  },
+  jumpToLatest: {
+    position: "absolute",
+    right: 16,
+    bottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#2563EB",
+  },
+  jumpToLatestText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
   },
   messageBubble: {
     maxWidth: "85%",

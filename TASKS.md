@@ -49,10 +49,10 @@
 - Selecting a server persists the selection and restores it on app launch.
 
 **Tasks**
-- [ ] Define persistent `ServerConfig` storage (e.g., SecureStore/AsyncStorage) with migration.
-- [ ] Implement Settings UI for server CRUD and validation.
-- [ ] Wire ProjectsHome server dropdown to stored servers + current selection.
-- [ ] Ensure server selection re-initializes the SDK client and resets dependent state.
+- [x] Define persistent `ServerConfig` storage (e.g., SecureStore/AsyncStorage) with migration.
+- [x] Implement Settings UI for server CRUD and validation.
+- [x] Wire ProjectsHome server dropdown to stored servers + current selection.
+- [x] Ensure server selection re-initializes the SDK client and resets dependent state.
 
 ## Phase 5: Projects List Auto-Load + Virtualization
 
@@ -62,21 +62,21 @@
 - Loading/error/empty states are visible and actionable.
 
 **Tasks**
-- [ ] Add `project.list` store action that runs on screen focus when server is set.
-- [ ] Render projects via `FlashList`/`FlatList` with stable keys and minimal row re-render.
+- [x] Add `project.list` store action that runs on screen focus when server is set.
+- [x] Render projects via `FlashList`/`FlatList` with stable keys, `getItemLayout` if feasible, and minimal row re-render.
 - [ ] Add pull-to-refresh and retry affordances.
 
 ## Phase 6: Sessions Auto-Load + Project-Scoped Virtualization
 
 **Acceptance Criteria**
 - Sessions auto-load when the Sessions screen opens.
-- Sessions screen only shows sessions for the currently selected project.
+- Sessions screen only shows sessions for the currently selected project (via `client.session.list({ directory: currentProject.directory })`).
 - Session list is scrollable and virtualized.
 
 **Tasks**
-- [ ] Add `session.list` store action keyed by `currentProject` and triggered on focus.
-- [ ] Gate Sessions screen: require selected project (otherwise CTA to Projects).
-- [ ] Render sessions via `FlashList`/`FlatList` with stable keys and row memoization.
+- [x] Add `session.list` store action keyed by `currentProject` and triggered on focus.
+- [x] Gate Sessions screen: require selected project (otherwise CTA to Projects).
+- [x] Render sessions via `FlashList`/`FlatList` with stable keys, row memoization, and optional `limit`/pagination.
 
 ## Phase 7: Conversation Jump-To-Bottom (No Long Scroll)
 
@@ -86,9 +86,9 @@
 - Behavior works for both initial load and subsequent message streaming.
 
 **Tasks**
-- [ ] Switch message stream to a virtualized list (`FlashList`/`FlatList`) with `inverted` or explicit initial scroll.
-- [ ] Implement “jump to latest” control when user is not at bottom.
-- [ ] Tune scroll behavior to avoid layout thrash during streaming updates.
+- [x] Switch message stream to a virtualized list (`FlashList`/`FlatList`) with `inverted` (preferred) or explicit `initialScrollIndex`.
+- [x] Implement "jump to latest" control when user is not at bottom.
+- [x] Prevent scroll-jank during streaming (batch updates, keep item heights stable where possible).
 
 ## Phase 8: Review Auto-Load Diffs + Visible Loading State
 
@@ -98,9 +98,9 @@
 - Empty diff state is explicit ("No changes").
 
 **Tasks**
-- [ ] Trigger `client.session.diff` on Review screen focus and on `currentSession` change.
-- [ ] Add `isDiffLoading` / `diffError` state and surface it in UI.
-- [ ] Ensure diffs update on relevant events (e.g., file changes / session.updated).
+- [x] Trigger `client.session.diff` on Review screen focus and on `currentSession` change.
+- [x] Add `isDiffsLoading` / `diffsError` state and surface it in UI.
+- [x] Ensure diffs update on relevant events (e.g., `session.diff`, `file.watcher.updated`, `session.updated`).
 
 ## Phase 9: QA and Performance Gates
 
@@ -110,6 +110,6 @@
 - Tests and lint/typecheck gates pass.
 
 **Tasks**
-- [ ] Add tests for server persistence + selection restore.
-- [ ] Add tests for auto-load triggers (focus-driven) and list scoping.
-- [ ] Run verification gates and resolve failures.
+- [x] Add tests for server persistence + selection restore.
+- [x] Add tests for auto-load triggers (focus-driven) and list scoping.
+- [x] Run verification gates and resolve failures.

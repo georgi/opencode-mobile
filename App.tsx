@@ -7,7 +7,12 @@ import { useSessionStore } from "./src/store/sessionStore"
 
 export default function App() {
   const client = useSessionStore((state) => state.client)
+  const hydrateServers = useSessionStore((state) => state.hydrateServers)
   const subscribeToEvents = useSessionStore((state) => state.subscribeToEvents)
+
+  useEffect(() => {
+    void hydrateServers()
+  }, [hydrateServers])
 
   useEffect(() => {
     if (!client) {

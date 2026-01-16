@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react"
-import { View, Text, StyleSheet, Button, Pressable } from "react-native"
+import React, { useEffect, useMemo, useState } from "react"
+import { View, Text, StyleSheet, Button, Pressable, ActivityIndicator } from "react-native"
 import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
 import { useSessionStore } from "../store/sessionStore"
@@ -8,6 +8,8 @@ import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 export default function ReviewScreen() {
   const route = useRoute<RouteProp<ProjectsStackParamList, "Review">>()
   const diffs = useSessionStore((state) => state.diffs)
+  const isDiffsLoading = useSessionStore((state) => state.isDiffsLoading)
+  const diffsError = useSessionStore((state) => state.diffsError)
   const fetchDiffs = useSessionStore((state) => state.fetchDiffs)
   const currentSession = useSessionStore((state) => state.currentSession)
   const sessionId = currentSession?.id ?? route.params?.sessionId
@@ -21,35 +23,61 @@ export default function ReviewScreen() {
     return diffs.find((diff) => diff.file === selectedFile) ?? diffs[0]
   }, [diffs, selectedFile])
 
+  useEffect(() => {
+    if (!sessionId) {
+      return
+    }
+
+    void fetchDiffs(sessionId)
+  }, [sessionId, fetchDiffs])
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Review Changes</Text>
       <Text>Unified diffs and apply action surface here.</Text>
-      {sessionId ? (
-        <Button title="Load Diffs" onPress={() => void fetchDiffs(sessionId)} />
-      ) : null}
-      <Text style={styles.label}>Changed Files</Text>
-      <Text>{diffs.length} files</Text>
-      <View style={styles.jumpList}>
-        {diffs.map((diff) => {
-          const isSelected = diff.file === selectedDiff?.file
-          return (
-            <Pressable
-              key={diff.file}
-              onPress={() => setSelectedFile(diff.file)}
-              style={[styles.jumpItem, isSelected && styles.jumpItemActive]}
-            >
-              <Text style={styles.jumpText}>{diff.file}</Text>
-            </Pressable>
-          )
-        })}
-      </View>
-      {selectedDiff ? (
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>{selectedDiff.file}</Text>
-          <Text>+{selectedDiff.additions} / -{selectedDiff.deletions}</Text>
+
+      {isDiffsLoading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.loadingText}>Loading diffs...</Text>
         </View>
-      ) : null}
+      ) : diffsError ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>{diffsError}</Text>
+          {sessionId ? (
+            <Button title="Retry" onPress={() => void fetchDiffs(sessionId)} />
+          ) : null}
+        </View>
+      ) : diffs.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No changes</Text>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.label}>Changed Files</Text>
+          <Text>{diffs.length} files</Text>
+          <View style={styles.jumpList}>
+            {diffs.map((diff) => {
+              const isSelected = diff.file === selectedDiff?.file
+              return (
+                <Pressable
+                  key={diff.file}
+                  onPress={() => setSelectedFile(diff.file)}
+                  style={[styles.jumpItem, isSelected && styles.jumpItemActive]}
+                >
+                  <Text style={styles.jumpText}>{diff.file}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+          {selectedDiff ? (
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>{selectedDiff.file}</Text>
+              <Text>+{selectedDiff.additions} / -{selectedDiff.deletions}</Text>
+            </View>
+          ) : null}
+        </>
+      )}
     </View>
   )
 }
@@ -95,5 +123,25 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  loadingState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#71717A",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    gap: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: "#71717A",
   },
 })

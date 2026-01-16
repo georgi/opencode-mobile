@@ -30,6 +30,9 @@
 ### 2.2 System Invariants
 1. The client must never send prompts while offline; it must surface `ERR OFFLINE`.
 2. The client must never bypass the SDK client for API calls.
+
+### Expo/Metro Note
+- Metro must resolve `package.json#exports` for `@opencode-ai/sdk/v2/client`; enable this via `metro.config.js` (`resolver.unstable_enablePackageExports = true`).
 3. The UI must never block token streaming on slow renders.
 4. The client must never mutate session state outside the store module.
 5. The app must never attempt local file editing or on-device repository changes.
@@ -43,14 +46,15 @@
 **Schema Definition:**
 ```ts
 import type {
+  Event,
+  FileDiff,
+  Message,
+  OpencodeClient,
+  PermissionRequest,
   Project,
   Session,
   SessionStatus,
-  Message,
-  FileDiff,
-  PermissionRequest,
-  Event,
-} from "@opencode-ai/sdk"
+} from "@opencode-ai/sdk/v2/client"
 
 type ServerConfig = {
   id: string
@@ -73,7 +77,7 @@ type SessionState = {
 
 State Management:
 - State lives in a single store module and is mutated only via store actions.
-- SDK types must be imported from `@opencode-ai/sdk`. Do not reference `types.gen.ts` in application code.
+- SDK types must be imported from `@opencode-ai/sdk/v2/client`. Avoid deep imports into `dist/*` or `gen/*` paths.
 
 Mutation Rules:
 - All writes occur via store actions that wrap SDK calls.
@@ -163,11 +167,11 @@ Phasing:
 3. Permissions, sharing, and notifications; complete when banners and sheets reflect events.
 
 ### 2.8 Required Public API (For Tests)
-1. `createOpencodeClient(config: { baseUrl: string; directory: string; basicAuth: string }): OpencodeClient`
-2. `OpencodeClient.session.create(projectId: string, worktreeId?: string): Promise<Session>`
-3. `OpencodeClient.session.prompt(sessionId: string, input: PromptInput): AsyncIterable<string>`
-4. `OpencodeClient.session.diff(sessionId: string): Promise<string>`
-5. `OpencodeClient.permission.respond(id: string, decision: "once" | "always" | "reject"): Promise<void>`
+1. `createOpencodeClient(config: { baseUrl: string; directory?: string; headers?: Record<string, string> }): OpencodeClient`
+2. `OpencodeClient.session.create({ directory?: string; title?: string; parentID?: string }): Promise<{ data?: Session }>`
+3. `OpencodeClient.session.prompt({ sessionID: string; directory?: string; parts?: PartInput[] }): Promise<{ data?: unknown }>`
+4. `OpencodeClient.session.diff({ sessionID: string; directory?: string }): Promise<{ data?: FileDiff[] }>`
+5. `OpencodeClient.permission.reply({ requestID: string; directory?: string; reply: "once" | "always" | "reject" }): Promise<{ data?: boolean }>`
 
 ### 2.9 Verification Gates (Mandatory)
 1. `npm test -- --watch=false`
@@ -215,13 +219,13 @@ error_model:
   unknown: "ERR UNKNOWN"
 public_api:
   - name: "createOpencodeClient"
-    signature: "createOpencodeClient(config) -> OpencodeClient"
+    signature: "createOpencodeClient({ baseUrl, directory?, headers? }) -> OpencodeClient"
   - name: "OpencodeClient.session.create"
-    signature: "(projectId: string, worktreeId?: string) -> Promise<Session>"
+    signature: "({ directory?, title?, parentID? }) -> { data?: Session }"
   - name: "OpencodeClient.session.prompt"
-    signature: "(sessionId: string, input: PromptInput) -> AsyncIterable<string>"
+    signature: "({ sessionID, directory?, parts? }) -> { data?: unknown }"
   - name: "OpencodeClient.session.diff"
-    signature: "(sessionId: string) -> Promise<string>"
+    signature: "({ sessionID, directory?, messageID? }) -> { data?: FileDiff[] }"
 verification_gates:
   - "npm test -- --watch=false"
   - "npm run lint"

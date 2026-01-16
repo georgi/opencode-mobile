@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   Button,
   Pressable,
 } from "react-native"
+import { FlashList } from "@shopify/flash-list"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 
 export default function SessionsListScreen() {
   const navigation =
@@ -23,6 +25,14 @@ export default function SessionsListScreen() {
   const setSession = useSessionStore((state) => state.setSession)
   const lastError = useSessionStore((state) => state.lastError)
   const [title, setTitle] = useState("")
+
+  useEffect(() => {
+    if (!currentProject) {
+      return
+    }
+
+    void fetchSessions()
+  }, [currentProject, fetchSessions])
 
   const handleCreate = async () => {
     const session = await createSession({ title: title || undefined })
@@ -48,25 +58,29 @@ export default function SessionsListScreen() {
       <Text style={styles.label}>Project</Text>
       <Text>{currentProject?.name ?? "No project selected"}</Text>
       <Text style={styles.label}>Sessions</Text>
-      <Button title="Load Sessions" onPress={() => void fetchSessions()} />
-      {sessions.length === 0 ? (
+      {!currentProject ? (
+        <Text>Select a project to view sessions.</Text>
+      ) : sessions.length === 0 ? (
         <Text>No sessions loaded</Text>
       ) : (
-        <View style={styles.sessionList}>
-          {sessions.map((session) => {
-            const isSelected = session.id === currentSession?.id
+        <FlashList
+          data={sessions}
+          keyExtractor={(session: Session) => session.id}
+          contentContainerStyle={styles.sessionList as never}
+          estimatedItemSize={72}
+          renderItem={({ item }: { item: Session }) => {
+            const isSelected = item.id === currentSession?.id
             return (
               <Pressable
-                key={session.id}
-                onPress={() => handleSelectSession(session.id)}
+                onPress={() => handleSelectSession(item.id)}
                 style={[styles.sessionItem, isSelected && styles.sessionItemActive]}
               >
-                <Text style={styles.sessionTitle}>{session.title}</Text>
-                <Text style={styles.sessionMeta}>{session.version}</Text>
+                <Text style={styles.sessionTitle}>{item.title}</Text>
+                <Text style={styles.sessionMeta}>{item.version}</Text>
               </Pressable>
             )
-          })}
-        </View>
+          }}
+        />
       )}
       <Text style={styles.label}>Create Session</Text>
       <TextInput

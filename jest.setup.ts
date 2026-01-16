@@ -6,3 +6,14 @@ jest.mock("react-native/Libraries/Animated/NativeAnimatedHelper")
 jest.mock("expo-clipboard", () => ({
   setStringAsync: jest.fn(),
 }))
+
+jest.mock(
+  "@react-native-async-storage/async-storage",
+  () => require("@react-native-async-storage/async-storage/jest/async-storage-mock")
+)
+
+jest.mock("expo-secure-store", () => ({
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => undefined),
+  deleteItemAsync: jest.fn(async () => undefined),
+}))

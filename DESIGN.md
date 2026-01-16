@@ -31,7 +31,7 @@ This document defines the technical design for the Expo touch-first client descr
 
 - UI components may only read state via selectors/hooks.
 - All mutations must go through store actions that call the SDK client.
-- Types must be imported from `@opencode-ai/sdk`. Do not reference `types.gen.ts` directly.
+- Use the public v2 entrypoint `@opencode-ai/sdk/v2/client` for SDK methods and types. Avoid deep imports like `@opencode-ai/sdk/dist/*` or `@opencode-ai/sdk/*/gen/*`.
 
 ## Data Model
 
@@ -46,7 +46,7 @@ import type {
   FileDiff,
   PermissionRequest,
   Event,
-} from "@opencode-ai/sdk"
+} from "@opencode-ai/sdk/v2/client"
 
 type ServerConfig = {
   id: string
@@ -100,13 +100,13 @@ State lives in the store and is updated only by store actions. UI components sub
 All API calls must use the SDK client created by:
 
 ```ts
-createOpencodeClient({ baseUrl, directory, basicAuth })
+createOpencodeClient({ baseUrl, directory, headers })
 ```
 
 ### Focus-Driven Auto-Load
 
 - Projects screen: if `currentServer` exists, auto-run `client.project.list` on focus.
-- Sessions screen: if `currentProject` exists, auto-run `client.session.list` on focus.
+- Sessions screen: if `currentProject` exists, auto-run `client.session.list({ directory: currentProject.directory })` on focus.
 - Session detail: auto-run `client.session.messages` on focus / session change.
 - Review panel: auto-run `client.session.diff` on focus / session change.
 
@@ -119,7 +119,7 @@ createOpencodeClient({ baseUrl, directory, basicAuth })
 - **Share**: `client.session.share` and `client.session.messages`.
 - **Worktrees**: `client.worktree.create` and directory selection per session.
 - **Permissions/Questions**: `client.permission.respond`, `client.question.reply`.
-- **Events**: `sdk.event.listen` for status, permissions, and session updates.
+- **Events**: `client.event.subscribe` for status, permissions, and session updates.
 
 ## Navigation and Screens
 

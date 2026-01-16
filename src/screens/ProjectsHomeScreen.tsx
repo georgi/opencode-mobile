@@ -1,110 +1,80 @@
-import React, { useState } from "react"
-import { View, Text, StyleSheet, TextInput, Button, Pressable } from "react-native"
+import React, { useEffect } from "react"
+import { View, Text, StyleSheet, Pressable } from "react-native"
+import { FlashList } from "@shopify/flash-list"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
+import type { CompositeNavigationProp } from "@react-navigation/native"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
+import type { Project } from "@opencode-ai/sdk/v2/client"
+import type { AppTabParamList } from "../navigation/AppTabs"
 
-const defaultBaseUrl = "https://api.opencode.ai"
+type ProjectsHomeNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<ProjectsStackParamList>,
+  BottomTabNavigationProp<AppTabParamList>
+>
 
 export default function ProjectsHomeScreen() {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<ProjectsStackParamList>>()
+  const navigation = useNavigation<ProjectsHomeNavigation>()
   const currentServer = useSessionStore((state) => state.currentServer)
   const currentProject = useSessionStore((state) => state.currentProject)
   const projects = useSessionStore((state) => state.projects)
-  const initializeClient = useSessionStore((state) => state.initializeClient)
   const fetchProjects = useSessionStore((state) => state.fetchProjects)
   const selectProject = useSessionStore((state) => state.selectProject)
-  const setError = useSessionStore((state) => state.setError)
   const lastError = useSessionStore((state) => state.lastError)
 
-  const [label, setLabel] = useState(currentServer?.label ?? "Prod")
-  const [baseUrl, setBaseUrl] = useState<string>(
-    currentServer?.baseUrl ?? defaultBaseUrl
-  )
-  const [directory, setDirectory] = useState(
-    currentServer?.directory ?? "/Users/you/dev/project"
-  )
-  const [basicAuth, setBasicAuth] = useState("")
-
-  const handleConnect = () => {
-    if (!baseUrl.trim() || !directory.trim()) {
-      setError("ERR INVALID COMMAND")
+  useEffect(() => {
+    if (!currentServer) {
       return
     }
 
-    initializeClient({
-      id: label.toLowerCase().replace(/\s+/g, "-"),
-      label,
-      baseUrl: baseUrl as `${string}://${string}`,
-      directory,
-      basicAuth,
-    })
-  }
+    void fetchProjects()
+  }, [currentServer, fetchProjects])
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Projects</Text>
       <Text>Recent projects and server picker go here.</Text>
-      <Text style={styles.label}>Server Picker</Text>
-      <TextInput
-        style={styles.input}
-        value={label}
-        onChangeText={setLabel}
-        placeholder="Server label"
-      />
-      <TextInput
-        style={styles.input}
-        value={baseUrl}
-        onChangeText={setBaseUrl}
-        placeholder="Base URL"
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        value={directory}
-        onChangeText={setDirectory}
-        placeholder="Directory"
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        value={basicAuth}
-        onChangeText={setBasicAuth}
-        placeholder="Basic auth token"
-        autoCapitalize="none"
-        secureTextEntry
-      />
-      <Button title="Connect" onPress={handleConnect} />
+
+      <Text style={styles.label}>Server</Text>
+      <Pressable
+        style={styles.serverSelector}
+        onPress={() => navigation.navigate("Settings")}
+      >
+        <Text style={styles.serverSelectorLabel}>
+          {currentServer?.label ?? "No server selected"}
+        </Text>
+        <Text style={styles.serverSelectorChevron}>›</Text>
+      </Pressable>
+
       {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
-      <Text style={styles.label}>Current Server</Text>
-      <Text>{currentServer?.label ?? "No server selected"}</Text>
+
       <Text style={styles.label}>Projects</Text>
-      <Button title="Load Projects" onPress={() => void fetchProjects()} />
       {projects.length === 0 ? (
         <Text>No projects loaded</Text>
       ) : (
-        <View style={styles.projectList}>
-          {projects.map((project) => {
-            const isSelected = project.id === currentProject?.id
+        <FlashList
+          data={projects}
+          keyExtractor={(project: Project) => project.id}
+          contentContainerStyle={styles.projectList as never}
+          estimatedItemSize={84}
+          renderItem={({ item }: { item: Project }) => {
+            const isSelected = item.id === currentProject?.id
             return (
               <Pressable
-                key={project.id}
                 onPress={() => {
-                  selectProject(project)
+                  selectProject(item)
                   navigation.navigate("SessionsList")
                 }}
                 style={[styles.projectItem, isSelected && styles.projectItemActive]}
               >
-                <Text style={styles.projectName}>
-                  {project.name ?? project.worktree}
-                </Text>
-                <Text style={styles.projectPath}>{project.worktree}</Text>
+                <Text style={styles.projectName}>{item.name ?? item.worktree}</Text>
+                <Text style={styles.projectPath}>{item.worktree}</Text>
               </Pressable>
             )
-          })}
-        </View>
+          }}
+        />
       )}
     </View>
   )
@@ -132,11 +102,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
+  serverSelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E4E4E7",
+  },
+  serverSelectorLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  serverSelectorChevron: {
+    fontSize: 18,
+    color: "#71717A",
+  },
   error: {
     color: "#D92D20",
   },
   projectList: {
     gap: 8,
+    paddingBottom: 12,
   },
   projectItem: {
     padding: 12,
