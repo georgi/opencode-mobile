@@ -17,3 +17,10 @@ jest.mock("expo-secure-store", () => ({
   setItemAsync: jest.fn(async () => undefined),
   deleteItemAsync: jest.fn(async () => undefined),
 }))
+
+jest.mock("react-native/Libraries/NativeComponent/ViewConfigIgnore", () => {
+  return {
+    ConditionallyIgnoredEventHandlers: (value: unknown) => value,
+    DynamicallyInjectedByGestureHandler: () => {},
+  }
+})

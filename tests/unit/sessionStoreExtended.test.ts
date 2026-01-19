@@ -207,6 +207,78 @@ describe("SessionStore Event Handling Integration", () => {
 
       expect(client.event.subscribe).not.toHaveBeenCalled()
     })
+
+    it("applies message part deltas while streaming", async () => {
+      const client = createMockClient()
+      const messageID = "msg-stream-1"
+      const partID = "part-stream-1"
+
+      let callCount = 0
+      client.event.subscribe.mockImplementation(async () => ({
+        stream: {
+          [Symbol.asyncIterator]: () => ({
+            next: async () => {
+              callCount += 1
+              if (callCount === 1) {
+                return {
+                  done: false,
+                  value: {
+                    type: "message.part.updated",
+                    properties: {
+                      part: {
+                        id: partID,
+                        sessionID: "session-1",
+                        messageID,
+                        type: "text",
+                        text: "",
+                      },
+                      delta: "Hel",
+                    },
+                  } as Event,
+                }
+              }
+              if (callCount === 2) {
+                return {
+                  done: false,
+                  value: {
+                    type: "message.part.updated",
+                    properties: {
+                      part: {
+                        id: partID,
+                        sessionID: "session-1",
+                        messageID,
+                        type: "text",
+                        text: "",
+                      },
+                      delta: "lo",
+                    },
+                  } as Event,
+                }
+              }
+              return { done: true, value: undefined }
+            },
+          }),
+        },
+      }))
+
+      useSessionStore.setState({
+        client,
+        currentServer: {
+          id: "server-1",
+          label: "Server",
+          baseUrl: "https://api.opencode.ai" as const,
+          directory: "/repo",
+          basicAuth: "token",
+        },
+      })
+
+      await useSessionStore.getState().subscribeToEvents()
+
+      const parts = useSessionStore.getState().messageParts[messageID]
+      expect(parts).toHaveLength(1)
+      expect(parts?.[0].type).toBe("text")
+      expect((parts?.[0] as any).text).toBe("Hello")
+    })
   })
 
   describe("Session event handling through state updates", () => {

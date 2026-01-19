@@ -65,7 +65,9 @@ export default function ProjectsHomeScreen() {
               <Pressable
                 onPress={() => {
                   selectProject(item)
-                  navigation.navigate("SessionsList")
+                  setTimeout(() => {
+                    navigation.navigate("SessionsList")
+                  }, 50)
                 }}
                 style={[styles.projectItem, isSelected && styles.projectItemActive]}
               >

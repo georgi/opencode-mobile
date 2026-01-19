@@ -13,6 +13,8 @@ import { FlashList, type FlashListRef } from "@shopify/flash-list"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import type { RouteProp } from "@react-navigation/native"
+import { Ionicons } from "@expo/vector-icons"
+import Markdown from "react-native-markdown-display"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Message, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2/client"
@@ -58,52 +60,16 @@ function MessageBubble({
 }) {
   const isUser = message.role === "user"
   const text = getPartText(parts)
-  const hasReasoning = parts.some((p) => p.type === "reasoning")
-  const hasTool = parts.some((p) => p.type === "tool")
 
   return (
-    <View
-      style={[
-        styles.messageBubble,
-        isUser ? styles.userBubble : styles.assistantBubble,
-      ]}
-    >
-      <View style={styles.messageHeader}>
-        <Text
-          style={[
-            styles.messageRole,
-            isUser ? styles.userRoleText : styles.assistantRoleText,
-          ]}
-        >
-          {isUser ? "You" : "Assistant"}
-        </Text>
-        {hasReasoning && !isUser && (
-          <View style={styles.reasoningBadge}>
-            <Text style={styles.reasoningBadgeText}>Thinking</Text>
-          </View>
-        )}
-        {hasTool && !isUser && (
-          <View style={styles.toolBadge}>
-            <Text style={styles.toolBadgeText}>Tool</Text>
-          </View>
-        )}
+    <View style={[styles.messageContainer, isUser ? styles.userMessage : styles.assistantMessage]}>
+      <View style={styles.messageMeta}>
+        <Text style={styles.roleLabel}>{isUser ? "You" : "Assistant"}</Text>
+        <Text style={styles.timestamp}>{formatTimestamp(message.time.created)}</Text>
       </View>
-      <Text
-        style={[
-          styles.messageText,
-          isUser ? styles.userMessageText : styles.assistantMessageText,
-        ]}
-      >
-        {text}
-      </Text>
-      <Text
-        style={[
-          styles.messageTime,
-          isUser ? styles.userTimeText : styles.assistantTimeText,
-        ]}
-      >
-        {formatTimestamp(message.time.created)}
-      </Text>
+      <View style={styles.messageContent}>
+        <Markdown style={markdownStyles}>{text}</Markdown>
+      </View>
     </View>
   )
 }
@@ -121,6 +87,9 @@ export default function SessionDetailScreen() {
   const abortSession = useSessionStore((state) => state.abortSession)
   const revertSession = useSessionStore((state) => state.revertSession)
   const unrevertSession = useSessionStore((state) => state.unrevertSession)
+  const isAgentWorking = useSessionStore((state) => state.isAgentWorking)
+  const setAgentWorking = useSessionStore((state) => state.setAgentWorking)
+  const subscribeToEvents = useSessionStore((state) => state.subscribeToEvents)
   const sessionId = currentSession?.id ?? route.params?.sessionId
 
   const [inputText, setInputText] = useState("")
@@ -133,6 +102,7 @@ export default function SessionDetailScreen() {
     if (sessionId) {
       setIsLoading(true)
       void fetchMessages(sessionId).finally(() => setIsLoading(false))
+      void subscribeToEvents()
     }
   }, [sessionId])
 
@@ -168,24 +138,6 @@ export default function SessionDetailScreen() {
     >
       <View style={styles.header}>
         <Text style={styles.title}>{currentSession?.title ?? "Session"}</Text>
-        <View style={styles.headerActions}>
-          {sessionId && (
-            <Pressable
-              style={styles.headerButton}
-              onPress={() => navigation.navigate("Review", { sessionId })}
-            >
-              <Text style={styles.headerButtonText}>Review</Text>
-            </Pressable>
-          )}
-          {sessionId && (
-            <Pressable
-              style={styles.headerButton}
-              onPress={() => navigation.navigate("Share", { sessionId })}
-            >
-              <Text style={styles.headerButtonText}>Share</Text>
-            </Pressable>
-          )}
-        </View>
       </View>
 
       <View style={styles.messagesContainer}>
@@ -202,19 +154,25 @@ export default function SessionDetailScreen() {
           </View>
         ) : (
           <>
-              <FlashList
-                ref={flatListRef}
-                data={messages}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <MessageBubble message={item} parts={messageParts[item.id] ?? []} />
-                )}
-                contentContainerStyle={styles.messagesList}
-                onScroll={(event) => {
-                  const offsetY = event.nativeEvent.contentOffset.y
-                  setIsAtBottom(offsetY < 32)
-                }}
-              />
+            {isAgentWorking && (
+              <View style={styles.thinkingIndicator}>
+                <ActivityIndicator size="small" color="#2563EB" />
+                <Text style={styles.thinkingText}>Agent is thinking...</Text>
+              </View>
+            )}
+            <FlashList
+              ref={flatListRef}
+              data={[...messages].reverse()}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <MessageBubble message={item} parts={messageParts[item.id] ?? []} />
+              )}
+              contentContainerStyle={styles.messagesList}
+              onScroll={(event) => {
+                const offsetY = event.nativeEvent.contentOffset.y
+                setIsAtBottom(offsetY < 32)
+              }}
+            />
 
             {!isAtBottom ? (
               <Pressable
@@ -234,7 +192,7 @@ export default function SessionDetailScreen() {
             style={styles.sessionButton}
             onPress={() => void abortSession(sessionId)}
           >
-            <Text style={styles.sessionButtonText}>Stop</Text>
+            <Ionicons name="stop" size={18} color="#DC2626" />
           </Pressable>
           <Pressable
             style={styles.sessionButton}
@@ -246,13 +204,26 @@ export default function SessionDetailScreen() {
               )
             }
           >
-            <Text style={styles.sessionButtonText}>Undo</Text>
+            <Ionicons name="arrow-undo" size={18} color="#2563EB" />
           </Pressable>
           <Pressable
             style={styles.sessionButton}
             onPress={() => void unrevertSession(sessionId)}
           >
-            <Text style={styles.sessionButtonText}>Redo</Text>
+            <Ionicons name="arrow-redo" size={18} color="#2563EB" />
+          </Pressable>
+          <View style={styles.sessionDivider} />
+          <Pressable
+            style={styles.sessionButton}
+            onPress={() => navigation.navigate("Review", { sessionId })}
+          >
+            <Ionicons name="git-pull-request" size={18} color="#2563EB" />
+          </Pressable>
+          <Pressable
+            style={styles.sessionButton}
+            onPress={() => navigation.navigate("Share", { sessionId })}
+          >
+            <Ionicons name="share" size={18} color="#2563EB" />
           </Pressable>
         </View>
       )}
@@ -307,20 +278,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
   },
-  headerActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  headerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#F4F4F5",
-    borderRadius: 6,
-  },
-  headerButtonText: {
-    fontSize: 14,
-    color: "#52525B",
-  },
   messagesContainer: {
     flex: 1,
   },
@@ -348,7 +305,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
-    gap: 12,
+    gap: 24,
   },
   jumpToLatest: {
     position: "absolute",
@@ -440,22 +397,62 @@ const styles = StyleSheet.create({
   assistantTimeText: {
     color: "#A1A1AA",
   },
+  messageContainer: {
+    width: "100%",
+    paddingVertical: 12,
+  },
+  userMessage: {
+    backgroundColor: "#EFF6FF",
+  },
+  assistantMessage: {
+    backgroundColor: "transparent",
+  },
+  messageMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  roleLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#71717A",
+  },
+  timestamp: {
+    fontSize: 12,
+    color: "#A1A1AA",
+  },
+  messageContent: {
+    flex: 1,
+  },
   sessionBar: {
     flexDirection: "row",
     justifyContent: "center",
+    alignItems: "center",
     gap: 16,
     paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: "#E4E4E7",
     backgroundColor: "white",
   },
-  sessionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  sessionDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: "#E4E4E7",
   },
-  sessionButtonText: {
+  sessionButton: {
+    padding: 8,
+  },
+  thinkingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
+  },
+  thinkingText: {
     fontSize: 14,
-    color: "#2563EB",
+    color: "#71717A",
     fontWeight: "500",
   },
   inputContainer: {
@@ -502,3 +499,109 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
   },
 })
+
+const markdownStyles = {
+  body: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#18181B",
+  },
+  heading1: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    marginTop: 12,
+    marginBottom: 6,
+    color: "#18181B",
+  },
+  heading2: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    marginTop: 10,
+    marginBottom: 4,
+    color: "#18181B",
+  },
+  heading3: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+    marginTop: 8,
+    marginBottom: 3,
+    color: "#18181B",
+  },
+  paragraph: {
+    marginBottom: 8,
+  },
+  strong: {
+    fontWeight: "700" as const,
+  },
+  em: {
+    fontStyle: "italic" as const,
+  },
+  blockquote: {
+    borderLeftWidth: 4,
+    borderLeftColor: "#E4E4E7",
+    paddingLeft: 10,
+    marginLeft: 0,
+    color: "#52525B",
+  },
+  code: {
+    backgroundColor: "#F4F4F5",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontSize: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  fence: {
+    backgroundColor: "#1E1E1E",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontSize: 10,
+    padding: 10,
+    borderRadius: 6,
+    color: "#D4D4D4",
+  },
+  link: {
+    color: "#2563EB",
+    textDecorationLine: "underline" as const,
+  },
+  bullet_list: {
+    marginBottom: 12,
+  },
+  ordered_list: {
+    marginBottom: 12,
+  },
+  list_item: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    marginBottom: 4,
+  },
+  bullet: {
+    marginRight: 8,
+    marginTop: 4,
+  },
+  table: {
+    borderWidth: 1,
+    borderColor: "#E4E4E7",
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  thead: {
+    backgroundColor: "#F4F4F5",
+  },
+  tbody: {},
+  th: {
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#E4E4E7",
+    fontWeight: "600" as const,
+  },
+  td: {
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#E4E4E7",
+  },
+  horizontal_rule: {
+    borderTopWidth: 1,
+    borderTopColor: "#E4E4E7",
+    marginVertical: 16,
+  },
+}

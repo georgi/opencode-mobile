@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useLayoutEffect, useState } from "react"
 import {
   View,
   Text,
@@ -34,6 +34,13 @@ export default function SessionsListScreen() {
     void fetchSessions()
   }, [currentProject, fetchSessions])
 
+  useLayoutEffect(() => {
+    console.log("Project object:", currentProject)
+    navigation.setOptions({
+      headerTitle: currentProject?.worktree ?? "",
+    })
+  }, [currentProject, navigation])
+
   const handleCreate = async () => {
     const session = await createSession({ title: title || undefined })
     if (session?.id) {
@@ -53,10 +60,6 @@ export default function SessionsListScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sessions List</Text>
-      <Text>Active sessions for the selected project.</Text>
-      <Text style={styles.label}>Project</Text>
-      <Text>{currentProject?.name ?? "No project selected"}</Text>
       <Text style={styles.label}>Sessions</Text>
       {!currentProject ? (
         <Text>Select a project to view sessions.</Text>
@@ -67,7 +70,6 @@ export default function SessionsListScreen() {
           data={sessions}
           keyExtractor={(session: Session) => session.id}
           contentContainerStyle={styles.sessionList as never}
-          estimatedItemSize={72}
           renderItem={({ item }: { item: Session }) => {
             const isSelected = item.id === currentSession?.id
             return (
@@ -102,10 +104,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     gap: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "600",
   },
   label: {
     fontSize: 14,

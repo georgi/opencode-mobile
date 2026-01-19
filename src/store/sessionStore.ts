@@ -47,6 +47,7 @@ export type SessionState = {
   pendingPermissions: PermissionRequest[]
   isOffline: boolean
   lastError?: string
+  isAgentWorking: boolean
 }
 
 export const initialSessionState: SessionState = {
@@ -59,6 +60,7 @@ export const initialSessionState: SessionState = {
   projects: [],
   pendingPermissions: [],
   isOffline: false,
+  isAgentWorking: false,
 }
 
 type SessionActions = {
@@ -79,6 +81,7 @@ type SessionActions = {
   setDiffs: (diffs: FileDiff[]) => void
   setDiffLoading: (isDiffsLoading: boolean, diffsError?: string) => void
   setProjects: (projects: Project[]) => void
+  setAgentWorking: (isWorking: boolean) => void
 
   setPendingPermissions: (permissions: PermissionRequest[]) => void
   setOffline: (isOffline: boolean) => void
@@ -136,6 +139,28 @@ const upsertMessage = (messages: Message[], message: Message) => {
   return sortMessages(next)
 }
 
+const upsertPart = (parts: Part[], incoming: Part, delta?: string) => {
+  const index = parts.findIndex((item) => item.id === incoming.id)
+  if (index === -1) {
+    if (delta && incoming.type === "text") {
+      const textPart = incoming as TextPart
+      return [...parts, { ...textPart, text: `${textPart.text ?? ""}${delta}` }]
+    }
+    return [...parts, incoming]
+  }
+
+  const existing = parts[index]
+  const next = [...parts]
+  if (delta && existing.type === "text") {
+    const textPart = existing as TextPart
+    next[index] = { ...textPart, text: `${textPart.text ?? ""}${delta}` }
+    return next
+  }
+
+  next[index] = incoming
+  return next
+}
+
 export const useSessionStore = create<SessionState & SessionActions>((set, get) => {
   const ensureClient = () => {
     const { client, isOffline } = get()
@@ -154,6 +179,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
   }
 
   const handleEvent = (event: Event) => {
+    console.log("Event received:", event.type, JSON.stringify(event.properties, null, 2))
     switch (event.type) {
       case "session.updated":
       case "session.created": {
@@ -180,7 +206,36 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       }
       case "message.updated": {
         const message = event.properties.info
+        if (message.role === "assistant") {
+          set({ isAgentWorking: false })
+        }
         set((state) => ({ messages: upsertMessage(state.messages, message) }))
+        break
+      }
+      case "message.part.updated": {
+        const { part, delta } = event.properties
+        set((state) => {
+          const messageID = part.messageID
+          const parts = state.messageParts[messageID] ?? []
+          return {
+            messageParts: {
+              ...state.messageParts,
+              [messageID]: upsertPart(parts, part, delta),
+            },
+          }
+        })
+        break
+      }
+      case "message.part.removed": {
+        const { messageID, partID } = event.properties
+        set((state) => ({
+          messageParts: {
+            ...state.messageParts,
+            [messageID]: (state.messageParts[messageID] ?? []).filter(
+              (part) => part.id !== partID
+            ),
+          },
+        }))
         break
       }
       case "permission.asked": {
@@ -364,6 +419,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     setDiffLoading: (isDiffsLoading, diffsError) =>
       set({ isDiffsLoading, diffsError }),
     setProjects: (projects) => set({ projects }),
+    setAgentWorking: (isAgentWorking) => set({ isAgentWorking }),
     setPendingPermissions: (permissions) => set({ pendingPermissions: permissions }),
     setOffline: (isOffline) => set({ isOffline }),
     setError: (error) => set({ lastError: error }),
@@ -461,20 +517,27 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return
       }
 
+      set({ isAgentWorking: true })
+
       const directory = get().currentServer?.directory
 
+      const userMessageId = `user-${Date.now()}`
+      const userPartId = `part-${Date.now()}`
+      
       const userMessage: Message = {
-        id: `user-${Date.now()}`,
+        id: userMessageId,
         sessionID: sessionId,
         role: "user",
         time: { created: Date.now() },
         agent: "",
         model: { providerID: "", modelID: "" },
-        parts: [{ id: `part-${Date.now()}`, sessionID: sessionId, messageID: `user-${Date.now()}`, type: "text", text }],
       } as Message
+
+      const userParts: Part[] = [{ id: userPartId, sessionID: sessionId, messageID: userMessageId, type: "text", text }]
 
       set((state) => ({
         messages: upsertMessage(state.messages, userMessage),
+        messageParts: { ...state.messageParts, [userMessageId]: userParts },
         lastError: undefined,
       }))
 
@@ -487,7 +550,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
       const response = resolveData(result)
       if (!response) {
-        set({ lastError: "ERR SERVER UNAVAILABLE" })
+        set({ lastError: "ERR SERVER UNAVAILABLE", isAgentWorking: false })
         return
       }
 
@@ -500,7 +563,8 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         for (const item of messagesData) {
           messageParts[item.info.id] = item.parts
         }
-        set({ messages: sortMessages(messages), messageParts, lastError: undefined })
+        const hasAssistantMessage = messagesData.some(item => item.info.role === "assistant")
+        set({ messages: sortMessages(messages), messageParts, lastError: undefined, isAgentWorking: !hasAssistantMessage })
       }
     },
     fetchMessages: async (sessionId) => {
