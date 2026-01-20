@@ -90,6 +90,7 @@ export default function SessionDetailScreen() {
   const isAgentWorking = useSessionStore((state) => state.isAgentWorking)
   const setAgentWorking = useSessionStore((state) => state.setAgentWorking)
   const subscribeToEvents = useSessionStore((state) => state.subscribeToEvents)
+  const closeEventSource = useSessionStore((state) => state.closeEventSource)
   const sessionId = currentSession?.id ?? route.params?.sessionId
 
   const [inputText, setInputText] = useState("")
@@ -102,9 +103,17 @@ export default function SessionDetailScreen() {
     if (sessionId) {
       setIsLoading(true)
       void fetchMessages(sessionId).finally(() => setIsLoading(false))
-      void subscribeToEvents()
+      void subscribeToEvents(sessionId)
     }
   }, [sessionId])
+
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      console.log("🔌 SessionDetailScreen unmounting, closing EventSource")
+      closeEventSource()
+    }
+  }, [])
 
   const handleSend = async () => {
     if (!inputText.trim() || !sessionId || isSending) {

@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import "react-native-url-polyfill/auto"
 import type {
   Event,
   FileDiff,
@@ -12,6 +13,7 @@ import type {
   TextPartInput,
 } from "@opencode-ai/sdk/v2/client"
 import { createSdkClient } from "../sdk/client"
+import { DebugSse } from "../utils/debugSse"
 import {
   deleteServerSecrets,
   loadCurrentServerId,
@@ -48,6 +50,14 @@ export type SessionState = {
   isOffline: boolean
   lastError?: string
   isAgentWorking: boolean
+
+  // Debug: Event counter
+  eventCount: number
+  lastEventType: string | undefined
+
+  // EventSource connection
+  eventSource?: any
+  eventSessionId?: string
 }
 
 export const initialSessionState: SessionState = {
@@ -61,6 +71,14 @@ export const initialSessionState: SessionState = {
   pendingPermissions: [],
   isOffline: false,
   isAgentWorking: false,
+
+  // Debug: Event counter
+  eventCount: 0,
+  lastEventType: undefined,
+
+  // EventSource connection
+  eventSource: undefined,
+  eventSessionId: undefined,
 }
 
 type SessionActions = {
@@ -109,7 +127,8 @@ type SessionActions = {
   ) => Promise<boolean>
   shareSession: (sessionId: string) => Promise<Session | undefined>
   unshareSession: (sessionId: string) => Promise<Session | undefined>
-  subscribeToEvents: () => Promise<void>
+  subscribeToEvents: (sessionId?: string) => Promise<void>
+  closeEventSource: () => void
 }
 
 type ResultFields<TData> = {
@@ -178,8 +197,80 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     return client
   }
 
-  const handleEvent = (event: Event) => {
-    console.log("Event received:", event.type, JSON.stringify(event.properties, null, 2))
+  const isForSession = (event: Event, sessionId: string | undefined) => {
+    if (!sessionId) return true
+
+    switch (event.type) {
+      case "session.status":
+      case "session.diff":
+      case "session.error":
+      case "permission.asked":
+      case "permission.replied":
+      case "question.asked":
+      case "question.replied":
+      case "question.rejected":
+      case "todo.updated":
+        return event.properties.sessionID === sessionId
+
+      case "message.updated":
+        return event.properties.info.sessionID === sessionId
+
+      case "message.part.updated":
+        return event.properties.part.sessionID === sessionId
+
+      case "message.part.removed": {
+        const message = get().messages.find((item) => item.id === event.properties.messageID)
+        return message?.sessionID === sessionId
+      }
+
+      case "session.updated":
+      case "session.created":
+      case "session.deleted":
+        return event.properties.info.id === sessionId
+
+      default:
+        return false
+    }
+  }
+
+  const normalizeDirectory = (value?: string) => (value ? value.replace(/\/+$/, "") : value)
+
+  const handleEvent = (event: Event, directory?: string) => {
+    const currentDirectory = normalizeDirectory(get().currentServer?.directory)
+    const eventDirectory = normalizeDirectory(directory)
+    if (eventDirectory && currentDirectory && eventDirectory !== currentDirectory) {
+      console.log("🧭 Dropped event (directory mismatch)", {
+        eventDirectory,
+        currentDirectory,
+        type: event.type,
+      })
+      return
+    }
+
+    const sessionId = get().eventSessionId ?? get().currentSession?.id
+    if (!isForSession(event, sessionId)) {
+      console.log("🧭 Dropped event (session mismatch)", {
+        sessionId,
+        type: event.type,
+      })
+      return
+    }
+
+    // Log to console AND update state
+    console.log("🔔 EVENT RECEIVED:", event.type, JSON.stringify(event.properties, null, 2))
+
+    // Update debug counters in state
+    set((state) => ({
+      eventCount: state.eventCount + 1,
+      lastEventType: event.type,
+    }))
+
+    // Also log to Alert for visibility
+    if (event.type !== "server.connected" && event.type !== "session.status") {
+      // Only alert for non-heartbeat events
+      console.log("📊 Event counter:", get().eventCount + 1)
+    }
+
     switch (event.type) {
       case "session.updated":
       case "session.created": {
@@ -424,16 +515,25 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     setOffline: (isOffline) => set({ isOffline }),
     setError: (error) => set({ lastError: error }),
     clearError: () => set({ lastError: undefined }),
-    reset: () => set({
-      ...initialSessionState,
-      client: undefined,
-      currentServerId: undefined,
-      currentServer: undefined,
-      currentProject: undefined,
-      currentSession: undefined,
-      lastError: undefined,
-      diffsError: undefined,
-    }),
+    reset: () => {
+      // Close EventSource if open
+      const es = get().eventSource
+      if (es) {
+        es.close()
+      }
+
+      set({
+        ...initialSessionState,
+        client: undefined,
+        currentServerId: undefined,
+        currentServer: undefined,
+        currentProject: undefined,
+        currentSession: undefined,
+        lastError: undefined,
+        diffsError: undefined,
+        eventSource: undefined,
+      })
+    },
     initializeClient: (server) => {
       const client = createSdkClient({
         baseUrl: server.baseUrl,
@@ -518,28 +618,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       }
 
       set({ isAgentWorking: true })
-
       const directory = get().currentServer?.directory
-
-      const userMessageId = `user-${Date.now()}`
-      const userPartId = `part-${Date.now()}`
-      
-      const userMessage: Message = {
-        id: userMessageId,
-        sessionID: sessionId,
-        role: "user",
-        time: { created: Date.now() },
-        agent: "",
-        model: { providerID: "", modelID: "" },
-      } as Message
-
-      const userParts: Part[] = [{ id: userPartId, sessionID: sessionId, messageID: userMessageId, type: "text", text }]
-
-      set((state) => ({
-        messages: upsertMessage(state.messages, userMessage),
-        messageParts: { ...state.messageParts, [userMessageId]: userParts },
-        lastError: undefined,
-      }))
 
       const parts: TextPartInput[] = [{ type: "text", text }]
       const result = await client.session.prompt({
@@ -767,17 +846,105 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       set({ currentSession: session, lastError: undefined })
       return session
     },
-    subscribeToEvents: async () => {
+    subscribeToEvents: async (sessionId) => {
+      console.log("🚀 Starting event subscription with EventSource...")
+
       const client = ensureClient()
       if (!client) {
+        console.error("❌ Event subscription failed: No client")
         return
       }
 
+      // Use the server directory (matches Instance.directory on the server)
       const directory = get().currentServer?.directory
-      const streamResult = await client.event.subscribe({ directory })
+      if (!directory) {
+        console.error("❌ Event subscription failed: No directory")
+        return
+      }
 
-      for await (const event of streamResult.stream) {
-        handleEvent(event)
+      console.log("📡 Subscribing to events for directory:", directory)
+
+      // Close existing EventSource if any
+      const existingSource = get().eventSource
+      if (existingSource) {
+        console.log("🔌 Closing existing EventSource connection")
+        existingSource.close()
+      }
+
+      let serverUrl: URL
+      try {
+        const baseUrl = get().currentServer?.baseUrl
+        if (!baseUrl) {
+          console.error("❌ Failed to build EventSource URL: missing baseUrl")
+          return
+        }
+        serverUrl = new URL(baseUrl)
+        serverUrl.pathname = serverUrl.pathname.replace(/\/+$/, "") + "/global/event"
+      } catch (error) {
+        console.error("❌ Failed to build EventSource URL", error)
+        return
+      }
+
+      const headers: Record<string, string> = {}
+      const basicAuth = get().currentServer?.basicAuth
+      if (basicAuth) {
+        headers.Authorization = `Basic ${basicAuth}`
+      }
+
+      console.log("📡 EventSource URL:", serverUrl.toString())
+      console.log("📡 EventSource headers:", headers)
+
+      // Create new EventSource connection
+      let es: DebugSse
+      try {
+        es = new DebugSse(serverUrl.toString(), {
+          timeout: 0,
+          debug: true,
+          headers,
+        })
+      } catch (error) {
+        console.error("❌ Failed to create DebugSse", error)
+        return
+      }
+
+      // Store reference to EventSource + session filter
+      set({ eventSource: es, eventSessionId: sessionId })
+
+      es.addEventListener("open", (event) => {
+        console.log("✅ EventSource connected!", event)
+      })
+
+      es.addEventListener("message", (event) => {
+        try {
+          console.log("📥 EventSource raw:", event.data)
+          const data = JSON.parse(event.data)
+          const payload = "payload" in data ? data.payload : data
+          const eventDirectory = "directory" in data ? data.directory : undefined
+          console.log("📨 EventSource message:", payload.type, payload.properties)
+          handleEvent(payload as Event, eventDirectory)
+        } catch (error) {
+          console.error("❌ Failed to parse event:", error, event.data)
+        }
+      })
+
+      es.addEventListener("error", (event) => {
+        console.error("❌ EventSource error:", event)
+        if (event.type === "exception") {
+          console.error("Exception:", event.error)
+        }
+      })
+
+      es.addEventListener("close", (event) => {
+        console.log("🔌 EventSource closed", event)
+      })
+    },
+
+    closeEventSource: () => {
+      const es = get().eventSource
+      if (es) {
+        console.log("🔌 Manually closing EventSource connection")
+        es.close()
+        set({ eventSource: undefined, eventSessionId: undefined })
       }
     },
   }

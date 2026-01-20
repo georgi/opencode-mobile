@@ -17,3 +17,4 @@ export function createSdkClient(config: ClientConfig) {
     headers,
   })
 }
+
