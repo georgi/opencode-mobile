@@ -10,10 +10,10 @@ A touch-first Expo app that mirrors core OpenCode web flows (projects, sessions,
 - Share links and basic server health/offline handling
 
 ## Screenshots
-![Screenshot 1](opencode.png)
-![Screenshot 2](opencode2.png)
-![Screenshot 3](opencode3.png)
-![Screenshot 4](opencode4.png)
+![Screenshot 1](opencode.jpeg)
+![Screenshot 2](opencode2.jpeg)
+![Screenshot 3](opencode3.jpeg)
+![Screenshot 4](opencode4.jpeg)
 
 ## Tech Stack
 - Expo SDK 54 / React Native 0.81
