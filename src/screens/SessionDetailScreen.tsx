@@ -18,6 +18,7 @@ import Markdown from "react-native-markdown-display"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Message, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2/client"
+import { colors, palette } from "../constants/theme"
 
 function formatTimestamp(timestamp: number): string {
   const date = new Date(timestamp)
@@ -152,7 +153,7 @@ export default function SessionDetailScreen() {
       <View style={styles.messagesContainer}>
         {isLoading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color="#2563EB" />
+            <ActivityIndicator size="large" color={colors.interactive.base} />
             <Text style={styles.loadingText}>Loading messages...</Text>
           </View>
         ) : messages.length === 0 ? (
@@ -165,7 +166,7 @@ export default function SessionDetailScreen() {
           <>
             {isAgentWorking && (
               <View style={styles.thinkingIndicator}>
-                <ActivityIndicator size="small" color="#2563EB" />
+                <ActivityIndicator size="small" color={colors.interactive.base} />
                 <Text style={styles.thinkingText}>Agent is thinking...</Text>
               </View>
             )}
@@ -201,7 +202,7 @@ export default function SessionDetailScreen() {
             style={styles.sessionButton}
             onPress={() => void abortSession(sessionId)}
           >
-            <Ionicons name="stop" size={18} color="#DC2626" />
+            <Ionicons name="stop" size={18} color={palette.ember[9]} />
           </Pressable>
           <Pressable
             style={styles.sessionButton}
@@ -213,26 +214,26 @@ export default function SessionDetailScreen() {
               )
             }
           >
-            <Ionicons name="arrow-undo" size={18} color="#2563EB" />
+            <Ionicons name="arrow-undo" size={18} color={colors.interactive.base} />
           </Pressable>
           <Pressable
             style={styles.sessionButton}
             onPress={() => void unrevertSession(sessionId)}
           >
-            <Ionicons name="arrow-redo" size={18} color="#2563EB" />
+            <Ionicons name="arrow-redo" size={18} color={colors.interactive.base} />
           </Pressable>
           <View style={styles.sessionDivider} />
           <Pressable
             style={styles.sessionButton}
             onPress={() => navigation.navigate("Review", { sessionId })}
           >
-            <Ionicons name="git-pull-request" size={18} color="#2563EB" />
+            <Ionicons name="git-pull-request" size={18} color={colors.interactive.base} />
           </Pressable>
           <Pressable
             style={styles.sessionButton}
             onPress={() => navigation.navigate("Share", { sessionId })}
           >
-            <Ionicons name="share" size={18} color="#2563EB" />
+            <Ionicons name="share" size={18} color={colors.interactive.base} />
           </Pressable>
         </View>
       )}
@@ -244,6 +245,8 @@ export default function SessionDetailScreen() {
           onChangeText={setInputText}
           onSubmitEditing={handleSend}
           placeholder="Type a message..."
+          placeholderTextColor={colors.text.weaker}
+          selectionColor={colors.interactive.base}
           multiline
           maxLength={10000}
         />
@@ -271,7 +274,7 @@ export default function SessionDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: colors.background.base,
   },
   header: {
     flexDirection: "row",
@@ -280,12 +283,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#E4E4E7",
-    backgroundColor: "white",
+    borderBottomColor: colors.surface.highlight,
+    backgroundColor: colors.background.base,
   },
   title: {
     fontSize: 18,
     fontWeight: "600",
+    color: colors.text.base,
   },
   messagesContainer: {
     flex: 1,
@@ -304,12 +308,12 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: "#71717A",
+    color: colors.text.weak,
     marginTop: 12,
   },
   emptyStateText: {
     fontSize: 16,
-    color: "#71717A",
+    color: colors.text.weak,
     textAlign: "center",
   },
   messagesList: {
@@ -323,10 +327,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "#2563EB",
+    backgroundColor: colors.interactive.base,
   },
   jumpToLatestText: {
-    color: "white",
+    color: colors.text.invert,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -337,14 +341,14 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     alignSelf: "flex-end",
-    backgroundColor: "#2563EB",
+    backgroundColor: colors.interactive.base,
     borderBottomRightRadius: 4,
   },
   assistantBubble: {
     alignSelf: "flex-start",
-    backgroundColor: "white",
+    backgroundColor: colors.surface.base,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.surface.highlight,
     borderBottomLeftRadius: 4,
   },
   messageRole: {
@@ -359,7 +363,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   reasoningBadge: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: palette.solaris[2],
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -367,10 +371,10 @@ const styles = StyleSheet.create({
   reasoningBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#D97706",
+    color: palette.solaris[9],
   },
   toolBadge: {
-    backgroundColor: "#DBEAFE",
+    backgroundColor: palette.cobalt[2],
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -378,40 +382,47 @@ const styles = StyleSheet.create({
   toolBadgeText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#2563EB",
+    color: palette.cobalt[9],
   },
   userRoleText: {
-    color: "rgba(255, 255, 255, 0.8)",
+    color: colors.text.invert,
+    opacity: 0.8,
   },
   assistantRoleText: {
-    color: "#52525B",
+    color: colors.text.weak,
   },
   messageText: {
     fontSize: 15,
     lineHeight: 22,
   },
   userMessageText: {
-    color: "white",
+    color: colors.text.invert,
   },
   assistantMessageText: {
-    color: "#18181B",
+    color: colors.text.base,
   },
   messageTime: {
     fontSize: 11,
     marginTop: 4,
   },
   userTimeText: {
-    color: "rgba(255, 255, 255, 0.6)",
+    color: colors.text.invert,
+    opacity: 0.6,
   },
   assistantTimeText: {
-    color: "#A1A1AA",
+    color: colors.text.weaker,
   },
   messageContainer: {
     width: "100%",
     paddingVertical: 12,
   },
   userMessage: {
-    backgroundColor: "#EFF6FF",
+    // "styles.userMessage: backgroundColor: '#EFF6FF'" -> This is a light blue background for the entire row.
+    // "styles.assistantMessage: backgroundColor: 'transparent'"
+    // This seems to be a design choice where user messages have a highlighted row background?
+    // Let's replicate this with our colors.
+    backgroundColor: "transparent", // Let's simplify and remove row background for now, or use subtle.
+    // If I use transparent it might look cleaner.
   },
   assistantMessage: {
     backgroundColor: "transparent",
@@ -425,11 +436,11 @@ const styles = StyleSheet.create({
   roleLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#71717A",
+    color: colors.text.strong,
   },
   timestamp: {
     fontSize: 12,
-    color: "#A1A1AA",
+    color: colors.text.weaker,
   },
   messageContent: {
     flex: 1,
@@ -441,13 +452,13 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: "#E4E4E7",
-    backgroundColor: "white",
+    borderTopColor: colors.surface.highlight,
+    backgroundColor: colors.background.base,
   },
   sessionDivider: {
     width: 1,
     height: 24,
-    backgroundColor: "#E4E4E7",
+    backgroundColor: colors.surface.highlight,
   },
   sessionButton: {
     padding: 8,
@@ -461,7 +472,7 @@ const styles = StyleSheet.create({
   },
   thinkingText: {
     fontSize: 14,
-    color: "#71717A",
+    color: colors.text.weak,
     fontWeight: "500",
   },
   inputContainer: {
@@ -469,9 +480,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     padding: 12,
     gap: 8,
-    backgroundColor: "white",
+    backgroundColor: colors.background.base,
     borderTopWidth: 1,
-    borderTopColor: "#E4E4E7",
+    borderTopColor: colors.surface.highlight,
   },
   input: {
     flex: 1,
@@ -480,32 +491,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.input.border,
     borderRadius: 20,
     fontSize: 15,
+    backgroundColor: colors.input.bg,
+    color: colors.text.base,
   },
   sendButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: "#2563EB",
+    backgroundColor: colors.interactive.base,
     borderRadius: 20,
     minWidth: 70,
     alignItems: "center",
     justifyContent: "center",
   },
   sendButtonDisabled: {
-    backgroundColor: "#94A3B8",
+    backgroundColor: colors.interactive.hover, // Maybe use a disabled state color?
+    opacity: 0.5,
   },
   sendButtonText: {
-    color: "white",
+    color: colors.text.invert,
     fontSize: 15,
     fontWeight: "600",
   },
   error: {
-    color: "#D92D20",
+    color: colors.status.error,
     padding: 12,
     textAlign: "center",
-    backgroundColor: "#FEF2F2",
+    backgroundColor: palette.ember[2],
   },
 })
 
@@ -513,28 +527,28 @@ const markdownStyles = {
   body: {
     fontSize: 12,
     lineHeight: 18,
-    color: "#18181B",
+    color: colors.text.base,
   },
   heading1: {
     fontSize: 18,
     fontWeight: "700" as const,
     marginTop: 12,
     marginBottom: 6,
-    color: "#18181B",
+    color: colors.text.base,
   },
   heading2: {
     fontSize: 15,
     fontWeight: "600" as const,
     marginTop: 10,
     marginBottom: 4,
-    color: "#18181B",
+    color: colors.text.base,
   },
   heading3: {
     fontSize: 14,
     fontWeight: "600" as const,
     marginTop: 8,
     marginBottom: 3,
-    color: "#18181B",
+    color: colors.text.base,
   },
   paragraph: {
     marginBottom: 8,
@@ -547,29 +561,38 @@ const markdownStyles = {
   },
   blockquote: {
     borderLeftWidth: 4,
-    borderLeftColor: "#E4E4E7",
+    borderLeftColor: colors.surface.highlight,
     paddingLeft: 10,
     marginLeft: 0,
-    color: "#52525B",
+    color: colors.text.weak,
   },
-  code: {
-    backgroundColor: "#F4F4F5",
+  code_inline: {
+    backgroundColor: colors.surface.highlight,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     fontSize: 10,
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 3,
+    color: colors.text.base,
   },
-  fence: {
-    backgroundColor: "#1E1E1E",
+  code_block: {
+    backgroundColor: colors.surface.strong,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     fontSize: 10,
     padding: 10,
     borderRadius: 6,
-    color: "#D4D4D4",
+    color: colors.text.base,
+  },
+  fence: {
+    backgroundColor: colors.surface.strong,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontSize: 10,
+    padding: 10,
+    borderRadius: 6,
+    color: colors.text.base,
   },
   link: {
-    color: "#2563EB",
+    color: colors.interactive.base,
     textDecorationLine: "underline" as const,
   },
   bullet_list: {
@@ -589,28 +612,28 @@ const markdownStyles = {
   },
   table: {
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.surface.highlight,
     borderRadius: 8,
     marginVertical: 8,
   },
   thead: {
-    backgroundColor: "#F4F4F5",
+    backgroundColor: colors.surface.base,
   },
   tbody: {},
   th: {
     padding: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.surface.highlight,
     fontWeight: "600" as const,
   },
   td: {
     padding: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.surface.highlight,
   },
   horizontal_rule: {
     borderTopWidth: 1,
-    borderTopColor: "#E4E4E7",
+    borderTopColor: colors.surface.highlight,
     marginVertical: 16,
   },
 }

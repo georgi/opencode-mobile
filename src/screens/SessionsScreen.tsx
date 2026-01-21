@@ -6,6 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Session } from "@opencode-ai/sdk/v2/client"
+import { colors, palette } from "../constants/theme"
 
 export default function SessionsScreen() {
   const navigation =
@@ -52,7 +53,7 @@ export default function SessionsScreen() {
           data={sessions}
           keyExtractor={(session: Session) => session.id}
           contentContainerStyle={styles.sessionList as never}
-          estimatedItemSize={72}
+          // estimatedItemSize={72}
           renderItem={({ item }: { item: Session }) => {
             const isSelected = item.id === currentSession?.id
             return (
@@ -61,7 +62,6 @@ export default function SessionsScreen() {
                 style={[styles.sessionItem, isSelected && styles.sessionItemActive]}
               >
                 <Text style={styles.sessionTitle}>{item.title}</Text>
-                <Text style={styles.sessionMeta}>{item.version}</Text>
               </Pressable>
             )
           }}
@@ -76,15 +76,18 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     gap: 8,
+    backgroundColor: colors.background.base,
   },
   title: {
     fontSize: 20,
     fontWeight: "600",
+    color: colors.text.base,
   },
   label: {
     fontSize: 14,
     fontWeight: "500",
     marginTop: 12,
+    color: colors.text.weak,
   },
   sessionList: {
     gap: 8,
@@ -93,18 +96,20 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.surface.highlight,
+    backgroundColor: colors.surface.base,
   },
   sessionItemActive: {
-    backgroundColor: "#F0FDF4",
-    borderColor: "#BBF7D0",
+    backgroundColor: palette.cobalt[2],
+    borderColor: palette.cobalt[5],
   },
   sessionTitle: {
     fontSize: 16,
     fontWeight: "600",
+    color: colors.text.base,
   },
   sessionMeta: {
     fontSize: 12,
-    color: "#71717A",
+    color: colors.text.weak,
   },
 })

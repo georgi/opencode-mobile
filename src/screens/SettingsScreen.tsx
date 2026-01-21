@@ -9,6 +9,7 @@ import {
   Alert,
 } from "react-native"
 import { useSessionStore, type ServerConfig } from "../store/sessionStore"
+import { colors, palette } from "../constants/theme"
 
 const defaultBaseUrl = "https://api.opencode.ai"
 
@@ -68,14 +69,14 @@ export default function SettingsScreen() {
       <Text style={styles.title}>Settings</Text>
 
       <Text style={styles.label}>Status</Text>
-      <Text>{isOffline ? "Offline" : "Online"}</Text>
+      <Text style={styles.text}>{isOffline ? "Offline" : "Online"}</Text>
 
       <Text style={styles.label}>Current Server</Text>
-      <Text>{currentServer?.label ?? "No server selected"}</Text>
+      <Text style={styles.text}>{currentServer?.label ?? "No server selected"}</Text>
 
       <Text style={styles.label}>Saved Servers</Text>
       {servers.length === 0 ? (
-        <Text>No servers saved</Text>
+        <Text style={styles.text}>No servers saved</Text>
       ) : (
         <View style={styles.serverList}>
           {servers.map((server) => {
@@ -138,12 +139,14 @@ export default function SettingsScreen() {
         value={label}
         onChangeText={setLabel}
         placeholder="Label (e.g. Work)"
+        placeholderTextColor={colors.text.weaker}
       />
       <TextInput
         style={styles.input}
         value={baseUrl}
         onChangeText={setBaseUrl}
         placeholder="Base URL"
+        placeholderTextColor={colors.text.weaker}
         autoCapitalize="none"
       />
       <TextInput
@@ -151,6 +154,7 @@ export default function SettingsScreen() {
         value={directory}
         onChangeText={setDirectory}
         placeholder="Directory"
+        placeholderTextColor={colors.text.weaker}
         autoCapitalize="none"
       />
       <TextInput
@@ -158,6 +162,7 @@ export default function SettingsScreen() {
         value={basicAuth}
         onChangeText={setBasicAuth}
         placeholder="Basic auth token"
+        placeholderTextColor={colors.text.weaker}
         autoCapitalize="none"
         secureTextEntry
       />
@@ -193,22 +198,30 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 16,
     gap: 8,
+    backgroundColor: colors.background.base,
   },
   title: {
     fontSize: 20,
     fontWeight: "600",
+    color: colors.text.base,
   },
   label: {
     fontSize: 14,
     fontWeight: "500",
     marginTop: 12,
+    color: colors.text.weak,
+  },
+  text: {
+    color: colors.text.base,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.input.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    color: colors.text.base,
+    backgroundColor: colors.input.bg,
   },
   serverList: {
     gap: 8,
@@ -223,20 +236,22 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.surface.highlight,
+    backgroundColor: colors.surface.base,
     gap: 2,
   },
   serverSelectActive: {
-    backgroundColor: "#ECFEFF",
-    borderColor: "#A5F3FC",
+    backgroundColor: palette.cobalt[2],
+    borderColor: palette.cobalt[5],
   },
   serverLabel: {
     fontSize: 16,
     fontWeight: "600",
+    color: colors.text.base,
   },
   serverMeta: {
     fontSize: 12,
-    color: "#71717A",
+    color: colors.text.weak,
   },
   serverActions: {
     justifyContent: "center",
@@ -248,11 +263,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
-    backgroundColor: "#FFFFFF",
+    borderColor: colors.surface.highlight,
+    backgroundColor: colors.surface.base,
   },
   editText: {
-    color: "#18181B",
+    color: colors.text.base,
     fontWeight: "600",
   },
   deleteButton: {
@@ -261,37 +276,38 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#FCA5A5",
-    backgroundColor: "#FEF2F2",
+    borderColor: palette.ember[4],
+    backgroundColor: palette.ember[2],
   },
   deleteText: {
-    color: "#B91C1C",
+    color: colors.status.error,
     fontWeight: "600",
   },
   saveButton: {
     marginTop: 8,
     paddingVertical: 12,
     borderRadius: 8,
-    backgroundColor: "#18181B",
+    backgroundColor: colors.interactive.base,
     alignItems: "center",
   },
   saveButtonDisabled: {
-    backgroundColor: "#A1A1AA",
+    backgroundColor: colors.interactive.hover,
+    opacity: 0.5,
   },
   saveText: {
-    color: "#FFFFFF",
+    color: colors.text.invert,
     fontWeight: "600",
   },
   cancelButton: {
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E4",
-    backgroundColor: "#FFFFFF",
+    borderColor: colors.surface.highlight,
+    backgroundColor: colors.surface.base,
     alignItems: "center",
   },
   cancelText: {
-    color: "#18181B",
+    color: colors.text.base,
     fontWeight: "600",
   },
 })

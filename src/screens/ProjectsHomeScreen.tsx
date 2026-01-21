@@ -9,6 +9,7 @@ import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Project } from "@opencode-ai/sdk/v2/client"
 import type { AppTabParamList } from "../navigation/AppTabs"
+import { colors, palette } from "../constants/theme"
 
 type ProjectsHomeNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<ProjectsStackParamList>,
@@ -58,7 +59,7 @@ export default function ProjectsHomeScreen() {
           data={projects}
           keyExtractor={(project: Project) => project.id}
           contentContainerStyle={styles.projectList as never}
-          estimatedItemSize={84}
+          // estimatedItemSize={84}
           renderItem={({ item }: { item: Project }) => {
             const isSelected = item.id === currentProject?.id
             return (
@@ -71,8 +72,10 @@ export default function ProjectsHomeScreen() {
                 }}
                 style={[styles.projectItem, isSelected && styles.projectItemActive]}
               >
-                <Text style={styles.projectName}>{item.name ?? item.worktree}</Text>
-                <Text style={styles.projectPath}>{item.worktree}</Text>
+                <Text style={styles.projectName}>{item.name ?? item.worktree.split("/").pop()}</Text>
+                {item.name ? (
+                  <Text style={styles.projectPath}>{item.worktree}</Text>
+                ) : null}
               </Pressable>
             )
           }}
@@ -87,22 +90,27 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     gap: 8,
+    backgroundColor: colors.background.base,
   },
   title: {
     fontSize: 22,
     fontWeight: "600",
+    color: colors.text.base,
   },
   label: {
     fontSize: 14,
     fontWeight: "500",
     marginTop: 12,
+    color: colors.text.weak,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.input.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    color: colors.text.base,
+    backgroundColor: colors.input.bg,
   },
   serverSelector: {
     flexDirection: "row",
@@ -112,18 +120,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.input.border,
+    backgroundColor: colors.input.bg,
   },
   serverSelectorLabel: {
     fontSize: 14,
     fontWeight: "600",
+    color: colors.text.base,
   },
   serverSelectorChevron: {
     fontSize: 18,
-    color: "#71717A",
+    color: colors.text.weaker,
   },
   error: {
-    color: "#D92D20",
+    color: colors.status.error,
   },
   projectList: {
     gap: 8,
@@ -133,18 +143,20 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.surface.highlight,
+    backgroundColor: colors.surface.base,
   },
   projectItemActive: {
-    backgroundColor: "#ECFEFF",
-    borderColor: "#A5F3FC",
+    backgroundColor: palette.cobalt[2],
+    borderColor: palette.cobalt[5],
   },
   projectName: {
     fontSize: 16,
     fontWeight: "600",
+    color: colors.text.base,
   },
   projectPath: {
     fontSize: 12,
-    color: "#71717A",
+    color: colors.text.weak,
   },
 })

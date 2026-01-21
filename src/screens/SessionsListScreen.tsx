@@ -13,6 +13,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Session } from "@opencode-ai/sdk/v2/client"
+import { colors, palette } from "../constants/theme"
 
 export default function SessionsListScreen() {
   const navigation =
@@ -35,9 +36,8 @@ export default function SessionsListScreen() {
   }, [currentProject, fetchSessions])
 
   useLayoutEffect(() => {
-    console.log("Project object:", currentProject)
     navigation.setOptions({
-      headerTitle: currentProject?.worktree ?? "",
+      headerTitle: currentProject?.worktree?.replace(/\/$/, "").split("/").pop() ?? "",
     })
   }, [currentProject, navigation])
 
@@ -62,9 +62,9 @@ export default function SessionsListScreen() {
     <View style={styles.container}>
       <Text style={styles.label}>Sessions</Text>
       {!currentProject ? (
-        <Text>Select a project to view sessions.</Text>
+        <Text style={{ color: colors.text.base }}>Select a project to view sessions.</Text>
       ) : sessions.length === 0 ? (
-        <Text>No sessions loaded</Text>
+        <Text style={{ color: colors.text.base }}>No sessions loaded</Text>
       ) : (
         <FlashList
           data={sessions}
@@ -78,7 +78,6 @@ export default function SessionsListScreen() {
                 style={[styles.sessionItem, isSelected && styles.sessionItemActive]}
               >
                 <Text style={styles.sessionTitle}>{item.title}</Text>
-                <Text style={styles.sessionMeta}>{item.version}</Text>
               </Pressable>
             )
           }}
@@ -91,10 +90,12 @@ export default function SessionsListScreen() {
         onChangeText={setTitle}
         placeholder="Session title"
       />
-      <Button title="Start Session" onPress={() => void handleCreate()} />
+      <Pressable onPress={() => void handleCreate()} style={styles.button}>
+        <Text style={styles.buttonText}>Start Session</Text>
+      </Pressable>
       {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
       <Text style={styles.label}>Current Session</Text>
-      <Text>{currentSession?.title ?? "No session selected"}</Text>
+      <Text style={{ color: colors.text.base }}>{currentSession?.title ?? "No session selected"}</Text>
     </View>
   )
 }
@@ -104,21 +105,25 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     gap: 8,
+    backgroundColor: colors.background.base,
   },
   label: {
     fontSize: 14,
     fontWeight: "500",
     marginTop: 12,
+    color: colors.text.weak,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.input.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    color: colors.text.base,
+    backgroundColor: colors.input.bg,
   },
   error: {
-    color: "#D92D20",
+    color: colors.status.error,
   },
   sessionList: {
     gap: 8,
@@ -127,18 +132,31 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E4E4E7",
+    borderColor: colors.surface.highlight,
+    backgroundColor: colors.surface.base,
   },
   sessionItemActive: {
-    backgroundColor: "#F0FDF4",
-    borderColor: "#BBF7D0",
+    backgroundColor: palette.cobalt[2],
+    borderColor: palette.cobalt[5],
   },
   sessionTitle: {
     fontSize: 16,
     fontWeight: "600",
+    color: colors.text.base,
   },
   sessionMeta: {
     fontSize: 12,
-    color: "#71717A",
+    color: colors.text.weak,
+  },
+  button: {
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: colors.interactive.base,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: colors.text.invert,
+    fontWeight: "600",
   },
 })
