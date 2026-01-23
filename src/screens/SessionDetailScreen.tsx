@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
 } from "react-native"
 import { FlashList, type FlashListRef } from "@shopify/flash-list"
 import { useNavigation, useRoute } from "@react-navigation/native"
@@ -80,10 +81,16 @@ export default function SessionDetailScreen() {
     useNavigation<NativeStackNavigationProp<ProjectsStackParamList>>()
   const route = useRoute<RouteProp<ProjectsStackParamList, "SessionDetail">>()
   const currentSession = useSessionStore((state) => state.currentSession)
+  const currentProject = useSessionStore((state) => state.currentProject)
+  const currentServer = useSessionStore((state) => state.currentServer)
   const messages = useSessionStore((state) => state.messages)
   const messageParts = useSessionStore((state) => state.messageParts)
   const sendPrompt = useSessionStore((state) => state.sendPrompt)
   const fetchMessages = useSessionStore((state) => state.fetchMessages)
+  const fetchProviders = useSessionStore((state) => state.fetchProviders)
+  const providers = useSessionStore((state) => state.providers)
+  const selectedModel = useSessionStore((state) => state.selectedModel)
+  const setSelectedModel = useSessionStore((state) => state.setSelectedModel)
   const lastError = useSessionStore((state) => state.lastError)
   const abortSession = useSessionStore((state) => state.abortSession)
   const revertSession = useSessionStore((state) => state.revertSession)
@@ -98,6 +105,7 @@ export default function SessionDetailScreen() {
   const [isSending, setIsSending] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false)
   const flatListRef = useRef<FlashListRef<Message>>(null)
 
   useEffect(() => {
@@ -107,6 +115,13 @@ export default function SessionDetailScreen() {
       void subscribeToEvents(sessionId)
     }
   }, [sessionId])
+
+  useEffect(() => {
+    if (!currentProject && !currentServer) {
+      return
+    }
+    void fetchProviders()
+  }, [currentProject, currentServer, fetchProviders])
 
   // Cleanup EventSource on unmount
   useEffect(() => {
@@ -139,6 +154,25 @@ export default function SessionDetailScreen() {
       }, 100)
     }
   }, [messages.length, isAtBottom])
+
+  const providerOptions = providers.map((provider) => {
+    const models = Object.entries(provider.models ?? {}).map(([modelID, model]) => ({
+      providerID: provider.id,
+      modelID,
+      label: `${model.name ?? modelID}`,
+    }))
+    return { providerID: provider.id, providerName: provider.name, models }
+  })
+
+  const modelOptions = providerOptions.flatMap((provider) => provider.models)
+
+  const selectedModelLabel = (() => {
+    if (!selectedModel) return "Select model"
+    const provider = providers.find((item) => item.id === selectedModel.providerID)
+    const model = provider?.models?.[selectedModel.modelID]
+    if (!provider || !model) return "Select model"
+    return `${provider.name} / ${model.name ?? selectedModel.modelID}`
+  })()
 
   return (
     <KeyboardAvoidingView
@@ -238,6 +272,20 @@ export default function SessionDetailScreen() {
         </View>
       )}
 
+      <View style={styles.modelBar}>
+        <Text style={styles.modelLabel}>Model</Text>
+        <Pressable
+          style={[styles.modelButton, modelOptions.length === 0 && styles.modelButtonDisabled]}
+          onPress={() => {
+            void fetchProviders()
+            setIsModelPickerOpen(true)
+          }}
+        >
+          <Text style={styles.modelButtonText}>{selectedModelLabel}</Text>
+          <Ionicons name="chevron-down" size={14} color={colors.text.weak} />
+        </Pressable>
+      </View>
+
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
@@ -267,6 +315,48 @@ export default function SessionDetailScreen() {
       </View>
 
       {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+
+      <Modal
+        visible={isModelPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsModelPickerOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsModelPickerOpen(false)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Select model</Text>
+            <View style={styles.modalList}>
+              {providerOptions.map((provider) => (
+                <View key={provider.providerID} style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>{provider.providerName}</Text>
+                  {provider.models.length === 0 ? (
+                    <Text style={styles.modalEmpty}>No models available</Text>
+                  ) : (
+                    provider.models.map((option) => {
+                      const isSelected =
+                        selectedModel?.providerID === option.providerID && selectedModel?.modelID === option.modelID
+                      return (
+                        <Pressable
+                          key={`${option.providerID}/${option.modelID}`}
+                          style={[styles.modalItem, isSelected && styles.modalItemActive]}
+                          onPress={() => {
+                            setSelectedModel({ providerID: option.providerID, modelID: option.modelID })
+                            setIsModelPickerOpen(false)
+                          }}
+                        >
+                          <Text style={styles.modalItemText}>{option.label}</Text>
+                        </Pressable>
+                      )
+                    })
+                  )}
+                </View>
+              ))}
+              {providers.length === 0 ? <Text style={styles.modalEmpty}>No providers available</Text> : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   )
 }
@@ -290,6 +380,39 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: colors.text.base,
+  },
+  modelBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.surface.highlight,
+    backgroundColor: colors.surface.base,
+    gap: 8,
+  },
+  modelLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text.weak,
+  },
+  modelButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.surface.highlight,
+    backgroundColor: colors.background.base,
+  },
+  modelButtonDisabled: {
+    opacity: 0.6,
+  },
+  modelButtonText: {
+    color: colors.text.base,
+    fontSize: 13,
+    fontWeight: "600",
   },
   messagesContainer: {
     flex: 1,
@@ -437,6 +560,60 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: colors.text.strong,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxHeight: "70%",
+    borderRadius: 12,
+    backgroundColor: colors.background.base,
+    borderWidth: 1,
+    borderColor: colors.surface.highlight,
+    padding: 16,
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text.base,
+  },
+  modalList: {
+    gap: 8,
+  },
+  modalSection: {
+    gap: 8,
+  },
+  modalSectionTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text.weak,
+  },
+  modalItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.surface.highlight,
+    backgroundColor: colors.surface.base,
+  },
+  modalItemActive: {
+    borderColor: colors.interactive.base,
+    backgroundColor: palette.cobalt[1],
+  },
+  modalItemText: {
+    color: colors.text.base,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  modalEmpty: {
+    color: colors.text.weak,
+    fontSize: 13,
   },
   timestamp: {
     fontSize: 12,

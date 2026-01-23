@@ -1,10 +1,8 @@
-import React, { useEffect, useLayoutEffect, useState } from "react"
+import React, { useEffect, useLayoutEffect } from "react"
 import {
   View,
   Text,
   StyleSheet,
-  TextInput,
-  Button,
   Pressable,
 } from "react-native"
 import { FlashList } from "@shopify/flash-list"
@@ -25,7 +23,6 @@ export default function SessionsListScreen() {
   const fetchSessions = useSessionStore((state) => state.fetchSessions)
   const setSession = useSessionStore((state) => state.setSession)
   const lastError = useSessionStore((state) => state.lastError)
-  const [title, setTitle] = useState("")
 
   useEffect(() => {
     if (!currentProject) {
@@ -42,7 +39,10 @@ export default function SessionsListScreen() {
   }, [currentProject, navigation])
 
   const handleCreate = async () => {
-    const session = await createSession({ title: title || undefined })
+    const sessionDirectory =
+      currentProject?.sandboxes?.find((sandbox) => sandbox !== currentProject?.worktree) ??
+      currentProject?.worktree
+    const session = await createSession({ directory: sessionDirectory })
     if (session?.id) {
       navigation.navigate("SessionDetail", { sessionId: session.id })
     }
@@ -60,7 +60,6 @@ export default function SessionsListScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Sessions</Text>
       {!currentProject ? (
         <Text style={{ color: colors.text.base }}>Select a project to view sessions.</Text>
       ) : sessions.length === 0 ? (
@@ -83,19 +82,10 @@ export default function SessionsListScreen() {
           }}
         />
       )}
-      <Text style={styles.label}>Create Session</Text>
-      <TextInput
-        style={styles.input}
-        value={title}
-        onChangeText={setTitle}
-        placeholder="Session title"
-      />
       <Pressable onPress={() => void handleCreate()} style={styles.button}>
         <Text style={styles.buttonText}>Start Session</Text>
       </Pressable>
       {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
-      <Text style={styles.label}>Current Session</Text>
-      <Text style={{ color: colors.text.base }}>{currentSession?.title ?? "No session selected"}</Text>
     </View>
   )
 }
@@ -112,15 +102,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 12,
     color: colors.text.weak,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.input.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: colors.text.base,
-    backgroundColor: colors.input.bg,
   },
   error: {
     color: colors.status.error,
@@ -143,10 +124,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: colors.text.base,
-  },
-  sessionMeta: {
-    fontSize: 12,
-    color: colors.text.weak,
   },
   button: {
     marginTop: 8,

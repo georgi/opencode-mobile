@@ -12,6 +12,7 @@ import type {
   TextPart,
   TextPartInput,
 } from "@opencode-ai/sdk/v2/client"
+import type { ProviderListResponse } from "@opencode-ai/sdk/v2/client"
 import { createSdkClient } from "../sdk/client"
 import { DebugSse } from "../utils/debugSse"
 import {
@@ -45,6 +46,8 @@ export type SessionState = {
   diffs: FileDiff[]
   isDiffsLoading: boolean
   diffsError?: string
+  providers: ProviderListResponse["all"]
+  selectedModel?: { providerID: string; modelID: string }
   projects: Project[]
   pendingPermissions: PermissionRequest[]
   isOffline: boolean
@@ -67,6 +70,7 @@ export const initialSessionState: SessionState = {
   messageParts: {},
   diffs: [],
   isDiffsLoading: false,
+  providers: [],
   projects: [],
   pendingPermissions: [],
   isOffline: false,
@@ -99,6 +103,7 @@ type SessionActions = {
   setDiffs: (diffs: FileDiff[]) => void
   setDiffLoading: (isDiffsLoading: boolean, diffsError?: string) => void
   setProjects: (projects: Project[]) => void
+  setSelectedModel: (model?: { providerID: string; modelID: string }) => void
   setAgentWorking: (isWorking: boolean) => void
 
   setPendingPermissions: (permissions: PermissionRequest[]) => void
@@ -109,8 +114,9 @@ type SessionActions = {
   initializeClient: (server: ServerConfig) => void
   fetchProjects: () => Promise<Project[] | undefined>
   selectProject: (project: Project) => void
+  fetchProviders: () => Promise<ProviderListResponse["all"] | undefined>
   fetchSessions: () => Promise<Session[] | undefined>
-  createSession: (options?: { title?: string; parentID?: string }) => Promise<
+  createSession: (options?: { title?: string; parentID?: string; directory?: string }) => Promise<
     Session | undefined
   >
   sendPrompt: (sessionId: string, text: string) => Promise<void>
@@ -510,6 +516,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     setDiffLoading: (isDiffsLoading, diffsError) =>
       set({ isDiffsLoading, diffsError }),
     setProjects: (projects) => set({ projects }),
+    setSelectedModel: (model) => set({ selectedModel: model }),
     setAgentWorking: (isAgentWorking) => set({ isAgentWorking }),
     setPendingPermissions: (permissions) => set({ pendingPermissions: permissions }),
     setOffline: (isOffline) => set({ isOffline }),
@@ -562,6 +569,38 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       return projects
     },
     selectProject: (project) => set({ currentProject: project }),
+    fetchProviders: async () => {
+      const client = ensureClient()
+      if (!client) {
+        return undefined
+      }
+
+      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const result = await client.provider.list({ directory })
+      const data = resolveData(result)
+
+      if (!data) {
+        set({ lastError: "ERR SERVER UNAVAILABLE" })
+        return undefined
+      }
+
+      const providers = data.all
+      const selectedModel = get().selectedModel
+      const selectedStillValid =
+        selectedModel &&
+        providers.some((provider) => provider.id === selectedModel.providerID && provider.models?.[selectedModel.modelID])
+
+      if (!selectedStillValid) {
+        const firstProvider = providers.find((provider) => Object.keys(provider.models ?? {}).length > 0)
+        const firstModelID = firstProvider ? Object.keys(firstProvider.models ?? {})[0] : undefined
+        set({
+          selectedModel: firstProvider && firstModelID ? { providerID: firstProvider.id, modelID: firstModelID } : undefined,
+        })
+      }
+
+      set({ providers, lastError: undefined })
+      return providers
+    },
     fetchSessions: async () => {
       const client = ensureClient()
       if (!client) {
@@ -591,7 +630,11 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentServer?.directory
+      const directory = options?.directory ?? get().currentProject?.worktree
+      if (!directory) {
+        set({ lastError: "ERR INVALID COMMAND" })
+        return undefined
+      }
       const result = await client.session.create({
         directory,
         title: options?.title,
@@ -619,11 +662,13 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
       set({ isAgentWorking: true })
       const directory = get().currentServer?.directory
+      const selectedModel = get().selectedModel
 
       const parts: TextPartInput[] = [{ type: "text", text }]
       const result = await client.session.prompt({
         sessionID: sessionId,
         directory,
+        model: selectedModel,
         parts,
       })
 
