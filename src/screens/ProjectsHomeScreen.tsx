@@ -35,23 +35,7 @@ export default function ProjectsHomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Projects</Text>
-      <Text>Recent projects and server picker go here.</Text>
-
-      <Text style={styles.label}>Server</Text>
-      <Pressable
-        style={styles.serverSelector}
-        onPress={() => navigation.navigate("Settings")}
-      >
-        <Text style={styles.serverSelectorLabel}>
-          {currentServer?.label ?? "No server selected"}
-        </Text>
-        <Text style={styles.serverSelectorChevron}>›</Text>
-      </Pressable>
-
       {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
-
-      <Text style={styles.label}>Projects</Text>
       {projects.length === 0 ? (
         <Text>No projects loaded</Text>
       ) : (

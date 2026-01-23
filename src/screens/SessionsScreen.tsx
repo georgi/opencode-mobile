@@ -37,7 +37,6 @@ export default function SessionsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sessions</Text>
       <Text>Quick access to recent sessions.</Text>
 
       <Text style={styles.label}>Project</Text>
@@ -77,11 +76,6 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
     backgroundColor: colors.background.base,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: colors.text.base,
   },
   label: {
     fontSize: 14,
