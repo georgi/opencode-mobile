@@ -141,9 +141,9 @@ export const colors = {
 
   // Interactive
   interactive: {
-    base: palette.smoke[8],
-    hover: palette.smoke[9],
-    active: palette.cobalt[12],
+    base: palette.smoke[10],
+    hover: palette.smoke[11],
+    active: palette.smoke[12],
     text: palette.smoke[12],
   },
 
