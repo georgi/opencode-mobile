@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  ScrollView,
 } from "react-native"
 import { FlashList, type FlashListRef } from "@shopify/flash-list"
 import { useNavigation, useRoute } from "@react-navigation/native"
@@ -26,34 +27,147 @@ function formatTimestamp(timestamp: number): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
-function getPartText(parts: Part[]): string {
-  if (!parts || parts.length === 0) {
-    return ""
+// --- groupParts helper ---
+
+type TextSegment = { type: "text"; text: string }
+type ToolSegment = { type: "tools"; tools: ToolPart[] }
+type PartSegment = TextSegment | ToolSegment
+
+function groupParts(parts: Part[]): PartSegment[] {
+  if (!parts || parts.length === 0) return []
+  const segments: PartSegment[] = []
+  let currentTools: ToolPart[] = []
+  const flushTools = () => {
+    if (currentTools.length > 0) {
+      segments.push({ type: "tools", tools: [...currentTools] })
+      currentTools = []
+    }
   }
-
-  const texts: string[] = []
-
   for (const part of parts) {
-    if (part.type === "text" && (part as TextPart).text) {
-      texts.push((part as TextPart).text)
-    } else if (part.type === "reasoning" && (part as ReasoningPart).text) {
-      texts.push((part as ReasoningPart).text)
-    } else if (part.type === "tool" && (part as ToolPart).state) {
-      const toolPart = part as ToolPart
-      if (toolPart.state.status === "completed") {
-        texts.push(`${toolPart.tool}\n${toolPart.state.output}`)
-      } else if (toolPart.state.status === "running") {
-        texts.push(`${toolPart.tool}...`)
-      } else if (toolPart.state.status === "pending") {
-        texts.push(`${toolPart.tool}`)
+    if (part.type === "tool") {
+      currentTools.push(part as ToolPart)
+    } else {
+      flushTools()
+      let text = ""
+      if (part.type === "text" && (part as TextPart).text) {
+        text = (part as TextPart).text
+      } else if (part.type === "reasoning" && (part as ReasoningPart).text) {
+        text = (part as ReasoningPart).text
+      }
+      if (text) {
+        segments.push({ type: "text", text })
       }
     }
   }
-
-  return texts.join("\n\n")
+  flushTools()
+  return segments
 }
 
-function MessageBubble({
+// --- ThinkingIndicator ---
+
+const ThinkingIndicator = React.memo(function ThinkingIndicator() {
+  return (
+    <View style={styles.messageRow}>
+      <View style={[styles.avatar, styles.assistantAvatar]}>
+        <Ionicons name="sparkles" size={12} color={palette.smoke[9]} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={styles.messageHeader}>
+          <Text style={[styles.messageName, styles.assistantName]}>Assistant</Text>
+        </View>
+        <View style={[styles.messageBody, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
+          <ActivityIndicator size="small" color={colors.interactive.base} />
+          <Text style={styles.thinkingText}>Thinking...</Text>
+        </View>
+      </View>
+    </View>
+  )
+})
+
+// --- ToolCallRow ---
+
+function ToolCallRow({ tool }: { tool: ToolPart }) {
+  const status = tool.state?.status
+  const isError = status === "error"
+  const isCompleted = status === "completed"
+  const isRunning = status === "running" || status === "pending"
+
+  let iconName: keyof typeof Ionicons.glyphMap = "ellipse"
+  let iconColor = palette.smoke[7]
+  if (isCompleted) {
+    iconName = "checkmark-circle"
+    iconColor = palette.apple[9]
+  } else if (isError) {
+    iconName = "close-circle"
+    iconColor = palette.ember[9]
+  } else if (isRunning) {
+    iconName = "ellipse"
+    iconColor = palette.solaris[9]
+  }
+
+  const title = tool.state?.title || ""
+
+  return (
+    <View style={styles.toolRow}>
+      <Ionicons name={iconName} size={14} color={iconColor} />
+      <Text
+        style={[
+          styles.toolName,
+          isError && { color: palette.ember[11] },
+        ]}
+        numberOfLines={1}
+      >
+        {tool.tool}
+      </Text>
+      {title ? (
+        <Text style={styles.toolTitle} numberOfLines={1}>
+          {title}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
+
+// --- ToolCallGroup ---
+
+const ToolCallGroup = React.memo(function ToolCallGroup({ tools }: { tools: ToolPart[] }) {
+  const allCompleted = tools.every((t) => t.state?.status === "completed")
+  const [collapsed, setCollapsed] = useState(allCompleted)
+
+  // Auto-expand when any tool is running/pending
+  useEffect(() => {
+    const anyActive = tools.some(
+      (t) => t.state?.status === "running" || t.state?.status === "pending"
+    )
+    if (anyActive) setCollapsed(false)
+  }, [tools])
+
+  return (
+    <View style={styles.toolGroup}>
+      <Pressable style={styles.toolGroupHeader} onPress={() => setCollapsed((c) => !c)}>
+        <Ionicons
+          name={collapsed ? "chevron-forward" : "chevron-down"}
+          size={12}
+          color={palette.smoke[9]}
+        />
+        <Text style={styles.toolGroupHeaderText}>
+          {tools.length} TOOL CALL{tools.length !== 1 ? "S" : ""}
+        </Text>
+      </Pressable>
+      {!collapsed && (
+        <View style={styles.toolGroupBody}>
+          {tools.map((tool, i) => (
+            <ToolCallRow key={`${tool.tool}-${i}`} tool={tool} />
+          ))}
+        </View>
+      )}
+    </View>
+  )
+})
+
+// --- MessageRow ---
+
+const MessageRow = React.memo(function MessageRow({
   message,
   parts,
 }: {
@@ -61,20 +175,42 @@ function MessageBubble({
   parts: Part[]
 }) {
   const isUser = message.role === "user"
-  const text = getPartText(parts)
+  const segments = groupParts(parts)
 
   return (
-    <View style={[styles.messageContainer, isUser ? styles.userMessage : styles.assistantMessage]}>
-      <View style={styles.messageMeta}>
-        <Text style={styles.roleLabel}>{isUser ? "You" : "Assistant"}</Text>
-        <Text style={styles.timestamp}>{formatTimestamp(message.time.created)}</Text>
+    <View style={styles.messageRow}>
+      <View style={[styles.avatar, isUser ? styles.userAvatar : styles.assistantAvatar]}>
+        {isUser ? (
+          <Ionicons name="person" size={12} color={palette.smoke[9]} />
+        ) : (
+          <Ionicons name="sparkles" size={12} color={palette.smoke[9]} />
+        )}
       </View>
-      <View style={styles.messageContent}>
-        <Markdown style={markdownStyles}>{text}</Markdown>
+      <View style={{ flex: 1 }}>
+        <View style={styles.messageHeader}>
+          <Text style={[styles.messageName, isUser ? styles.userName : styles.assistantName]}>
+            {isUser ? "You" : "Assistant"}
+          </Text>
+          <Text style={styles.messageTimestamp}>{formatTimestamp(message.time.created)}</Text>
+        </View>
+        <View style={styles.messageBody}>
+          {segments.map((seg, i) => {
+            if (seg.type === "text") {
+              return (
+                <Markdown key={i} style={markdownStyles}>
+                  {seg.text}
+                </Markdown>
+              )
+            }
+            return <ToolCallGroup key={i} tools={seg.tools} />
+          })}
+        </View>
       </View>
     </View>
   )
-}
+})
+
+// --- Main Screen ---
 
 export default function SessionDetailScreen() {
   const navigation =
@@ -93,10 +229,7 @@ export default function SessionDetailScreen() {
   const setSelectedModel = useSessionStore((state) => state.setSelectedModel)
   const lastError = useSessionStore((state) => state.lastError)
   const abortSession = useSessionStore((state) => state.abortSession)
-  const revertSession = useSessionStore((state) => state.revertSession)
-  const unrevertSession = useSessionStore((state) => state.unrevertSession)
   const isAgentWorking = useSessionStore((state) => state.isAgentWorking)
-  const setAgentWorking = useSessionStore((state) => state.setAgentWorking)
   const subscribeToEvents = useSessionStore((state) => state.subscribeToEvents)
   const closeEventSource = useSessionStore((state) => state.closeEventSource)
   const sessionId = currentSession?.id ?? route.params?.sessionId
@@ -126,7 +259,7 @@ export default function SessionDetailScreen() {
   // Cleanup EventSource on unmount
   useEffect(() => {
     return () => {
-      console.log("🔌 SessionDetailScreen unmounting, closing EventSource")
+      console.log("SessionDetailScreen unmounting, closing EventSource")
       closeEventSource()
     }
   }, [])
@@ -147,13 +280,12 @@ export default function SessionDetailScreen() {
     }
   }
 
-  useEffect(() => {
-    if (messages.length > 0 && flatListRef.current && isAtBottom) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true })
-      }, 100)
+  const listData = React.useMemo(() => {
+    if (isAgentWorking) {
+      return [{ id: "__thinking__", role: "assistant" } as Message, ...messages]
     }
-  }, [messages.length, isAtBottom])
+    return messages
+  }, [messages, isAgentWorking])
 
   const providerOptions = providers.map((provider) => {
     const models = Object.entries(provider.models ?? {}).map(([modelID, model]) => ({
@@ -181,7 +313,40 @@ export default function SessionDetailScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <View style={styles.header}>
-        <Text style={styles.title}>{currentSession?.title ?? "Session"}</Text>
+        <View style={styles.headerLeft}>
+          <Pressable style={styles.headerButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={22} color={colors.text.base} />
+          </Pressable>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {currentSession?.title ?? "Session"}
+          </Text>
+        </View>
+        <View style={styles.headerRight}>
+          {isAgentWorking && sessionId ? (
+            <Pressable
+              style={styles.headerButton}
+              onPress={() => void abortSession(sessionId)}
+            >
+              <Ionicons name="stop" size={18} color={palette.ember[9]} />
+            </Pressable>
+          ) : null}
+          {sessionId ? (
+            <Pressable
+              style={styles.headerButton}
+              onPress={() => navigation.navigate("Review", { sessionId })}
+            >
+              <Ionicons name="git-pull-request" size={18} color={colors.interactive.base} />
+            </Pressable>
+          ) : null}
+          {sessionId ? (
+            <Pressable
+              style={styles.headerButton}
+              onPress={() => navigation.navigate("Share", { sessionId })}
+            >
+              <Ionicons name="share-outline" size={18} color={colors.interactive.base} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <View style={styles.messagesContainer}>
@@ -198,19 +363,22 @@ export default function SessionDetailScreen() {
           </View>
         ) : (
           <>
-            {isAgentWorking && (
-              <View style={styles.thinkingIndicator}>
-                <ActivityIndicator size="small" color={colors.interactive.base} />
-                <Text style={styles.thinkingText}>Agent is thinking...</Text>
-              </View>
-            )}
             <FlashList
               ref={flatListRef}
-              data={[...messages].reverse()}
+              data={listData}
+              inverted
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <MessageBubble message={item} parts={messageParts[item.id] ?? []} />
-              )}
+              estimatedItemSize={120}
+              extraData={messageParts}
+              overScrollMode="never"
+              renderItem={({ item }) => {
+                if (item.id === "__thinking__") {
+                  return <ThinkingIndicator />
+                }
+                return (
+                  <MessageRow message={item} parts={messageParts[item.id] ?? []} />
+                )
+              }}
               contentContainerStyle={styles.messagesList}
               onScroll={(event) => {
                 const offsetY = event.nativeEvent.contentOffset.y
@@ -221,7 +389,7 @@ export default function SessionDetailScreen() {
             {!isAtBottom ? (
               <Pressable
                 style={styles.jumpToLatest}
-                onPress={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
               >
                 <Text style={styles.jumpToLatestText}>Jump to latest</Text>
               </Pressable>
@@ -229,48 +397,6 @@ export default function SessionDetailScreen() {
           </>
         )}
       </View>
-
-      {sessionId && (
-        <View style={styles.sessionBar}>
-          <Pressable
-            style={styles.sessionButton}
-            onPress={() => void abortSession(sessionId)}
-          >
-            <Ionicons name="stop" size={18} color={palette.ember[9]} />
-          </Pressable>
-          <Pressable
-            style={styles.sessionButton}
-            onPress={() =>
-              void revertSession(
-                sessionId,
-                currentSession?.revert?.messageID,
-                currentSession?.revert?.partID
-              )
-            }
-          >
-            <Ionicons name="arrow-undo" size={18} color={colors.interactive.base} />
-          </Pressable>
-          <Pressable
-            style={styles.sessionButton}
-            onPress={() => void unrevertSession(sessionId)}
-          >
-            <Ionicons name="arrow-redo" size={18} color={colors.interactive.base} />
-          </Pressable>
-          <View style={styles.sessionDivider} />
-          <Pressable
-            style={styles.sessionButton}
-            onPress={() => navigation.navigate("Review", { sessionId })}
-          >
-            <Ionicons name="git-pull-request" size={18} color={colors.interactive.base} />
-          </Pressable>
-          <Pressable
-            style={styles.sessionButton}
-            onPress={() => navigation.navigate("Share", { sessionId })}
-          >
-            <Ionicons name="share" size={18} color={colors.interactive.base} />
-          </Pressable>
-        </View>
-      )}
 
       <View style={styles.modelBar}>
         <Text style={styles.modelLabel}>Model</Text>
@@ -327,7 +453,8 @@ export default function SessionDetailScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Select model</Text>
             <View style={styles.modalList}>
-              {providerOptions.map((provider) => (
+              <ScrollView style={{ maxHeight: 300 }}>
+                {providerOptions.map((provider) => (
                 <View key={provider.providerID} style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>{provider.providerName}</Text>
                   {provider.models.length === 0 ? (
@@ -353,6 +480,7 @@ export default function SessionDetailScreen() {
                 </View>
               ))}
               {providers.length === 0 ? <Text style={styles.modalEmpty}>No providers available</Text> : null}
+              </ScrollView>
             </View>
           </View>
         </View>
@@ -366,21 +494,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.base,
   },
+  // --- Header ---
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.surface.highlight,
     backgroundColor: colors.background.base,
   },
-  title: {
-    fontSize: 18,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 16,
     fontWeight: "600",
     color: colors.text.base,
+    maxWidth: "60%",
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerButton: {
+    padding: 8,
+  },
+  // --- Model bar ---
   modelBar: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -414,6 +557,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
+  // --- Messages ---
   messagesContainer: {
     flex: 1,
   },
@@ -441,7 +585,6 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
-    gap: 24,
   },
   jumpToLatest: {
     position: "absolute",
@@ -457,27 +600,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  messageBubble: {
-    maxWidth: "85%",
-    padding: 12,
-    borderRadius: 16,
+  // --- MessageRow ---
+  messageRow: {
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 10,
   },
-  userBubble: {
-    alignSelf: "flex-end",
-    backgroundColor: colors.interactive.base,
-    borderBottomRightRadius: 4,
+  avatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  assistantBubble: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.surface.base,
+  userAvatar: {
+    backgroundColor: palette.smoke[4],
+  },
+  assistantAvatar: {
+    backgroundColor: palette.smoke[3],
     borderWidth: 1,
-    borderColor: colors.surface.highlight,
-    borderBottomLeftRadius: 4,
-  },
-  messageRole: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 4,
+    borderColor: palette.smoke[5],
   },
   messageHeader: {
     flexDirection: "row",
@@ -485,82 +627,120 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
-  reasoningBadge: {
-    backgroundColor: palette.solaris[2],
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  messageName: {
+    fontSize: 13,
+    fontWeight: "700",
   },
-  reasoningBadgeText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: palette.solaris[9],
+  userName: {
+    color: palette.smoke[11],
   },
-  toolBadge: {
-    backgroundColor: palette.cobalt[2],
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  assistantName: {
+    color: palette.smoke[10],
   },
-  toolBadgeText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: palette.cobalt[9],
-  },
-  userRoleText: {
-    color: colors.text.invert,
-    opacity: 0.8,
-  },
-  assistantRoleText: {
-    color: colors.text.weak,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  userMessageText: {
-    color: colors.text.invert,
-  },
-  assistantMessageText: {
-    color: colors.text.base,
-  },
-  messageTime: {
+  messageTimestamp: {
     fontSize: 11,
-    marginTop: 4,
+    color: palette.smoke[7],
   },
-  userTimeText: {
-    color: colors.text.invert,
-    opacity: 0.6,
+  messageBody: {
+    marginLeft: 0, // content is already indented by avatar (22) + gap (6) = 28
   },
-  assistantTimeText: {
-    color: colors.text.weaker,
+  // --- ThinkingIndicator ---
+  thinkingText: {
+    fontSize: 13,
+    color: colors.text.weak,
+    fontWeight: "500",
   },
-  messageContainer: {
-    width: "100%",
-    paddingVertical: 12,
+  // --- Tool groups ---
+  toolGroup: {
+    backgroundColor: palette.smoke[2],
+    borderWidth: 1,
+    borderColor: palette.smoke[4],
+    borderRadius: 8,
+    marginTop: 6,
+    overflow: "hidden",
   },
-  userMessage: {
-    // "styles.userMessage: backgroundColor: '#EFF6FF'" -> This is a light blue background for the entire row.
-    // "styles.assistantMessage: backgroundColor: 'transparent'"
-    // This seems to be a design choice where user messages have a highlighted row background?
-    // Let's replicate this with our colors.
-    backgroundColor: "transparent", // Let's simplify and remove row background for now, or use subtle.
-    // If I use transparent it might look cleaner.
-  },
-  assistantMessage: {
-    backgroundColor: "transparent",
-  },
-  messageMeta: {
+  toolGroupHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: palette.smoke[1],
   },
-  roleLabel: {
+  toolGroupHeaderText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: palette.smoke[9],
+    letterSpacing: 0.5,
+  },
+  toolGroupBody: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  toolRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
+  },
+  toolName: {
     fontSize: 12,
-    fontWeight: "600",
-    color: colors.text.strong,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: palette.smoke[11],
   },
+  toolTitle: {
+    fontSize: 12,
+    color: palette.smoke[7],
+    flex: 1,
+  },
+  // --- Input ---
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    padding: 12,
+    gap: 8,
+    backgroundColor: colors.background.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.surface.highlight,
+  },
+  input: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 120,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.input.border,
+    borderRadius: 20,
+    fontSize: 15,
+    backgroundColor: colors.input.bg,
+    color: colors.text.base,
+  },
+  sendButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: colors.interactive.base,
+    borderRadius: 20,
+    minWidth: 70,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButtonDisabled: {
+    backgroundColor: colors.interactive.hover,
+    opacity: 0.5,
+  },
+  sendButtonText: {
+    color: colors.text.invert,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  error: {
+    color: colors.status.error,
+    padding: 12,
+    textAlign: "center",
+    backgroundColor: palette.ember[2],
+  },
+  // --- Modal ---
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
@@ -615,106 +795,23 @@ const styles = StyleSheet.create({
     color: colors.text.weak,
     fontSize: 13,
   },
-  timestamp: {
-    fontSize: 12,
-    color: colors.text.weaker,
-  },
-  messageContent: {
-    flex: 1,
-  },
-  sessionBar: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 16,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.surface.highlight,
-    backgroundColor: colors.background.base,
-  },
-  sessionDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: colors.surface.highlight,
-  },
-  sessionButton: {
-    padding: 8,
-  },
-  thinkingIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-  },
-  thinkingText: {
-    fontSize: 14,
-    color: colors.text.weak,
-    fontWeight: "500",
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    padding: 12,
-    gap: 8,
-    backgroundColor: colors.background.base,
-    borderTopWidth: 1,
-    borderTopColor: colors.surface.highlight,
-  },
-  input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 120,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: colors.input.border,
-    borderRadius: 20,
-    fontSize: 15,
-    backgroundColor: colors.input.bg,
-    color: colors.text.base,
-  },
-  sendButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: colors.interactive.base,
-    borderRadius: 20,
-    minWidth: 70,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendButtonDisabled: {
-    backgroundColor: colors.interactive.hover, // Maybe use a disabled state color?
-    opacity: 0.5,
-  },
-  sendButtonText: {
-    color: colors.text.invert,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  error: {
-    color: colors.status.error,
-    padding: 12,
-    textAlign: "center",
-    backgroundColor: palette.ember[2],
-  },
 })
 
 const markdownStyles = {
   body: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     color: colors.text.base,
   },
   heading1: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700" as const,
     marginTop: 12,
     marginBottom: 6,
     color: colors.text.base,
   },
   heading2: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "600" as const,
     marginTop: 10,
     marginBottom: 4,
@@ -746,7 +843,7 @@ const markdownStyles = {
   code_inline: {
     backgroundColor: colors.surface.highlight,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    fontSize: 10,
+    fontSize: 12,
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 3,
@@ -755,7 +852,7 @@ const markdownStyles = {
   code_block: {
     backgroundColor: colors.surface.strong,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    fontSize: 10,
+    fontSize: 12,
     padding: 10,
     borderRadius: 6,
     color: colors.text.base,
@@ -763,7 +860,7 @@ const markdownStyles = {
   fence: {
     backgroundColor: colors.surface.strong,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    fontSize: 10,
+    fontSize: 12,
     padding: 10,
     borderRadius: 6,
     color: colors.text.base,
