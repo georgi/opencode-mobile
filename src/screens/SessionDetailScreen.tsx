@@ -68,15 +68,15 @@ function groupParts(parts: Part[]): PartSegment[] {
 const ThinkingIndicator = React.memo(function ThinkingIndicator() {
   return (
     <View style={styles.messageRow}>
-      <View style={[styles.avatar, styles.assistantAvatar]}>
-        <Ionicons name="sparkles" size={12} color={palette.smoke[9]} />
+      <View style={[styles.avatar, styles.assistantAvatar]} accessibilityLabel="Assistant">
+        <Text style={styles.avatarText}>A</Text>
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.messageHeader}>
           <Text style={[styles.messageName, styles.assistantName]}>Assistant</Text>
         </View>
-        <View style={[styles.messageBody, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
-          <ActivityIndicator size="small" color={colors.interactive.base} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <ActivityIndicator size="small" color={palette.smoke[7]} />
           <Text style={styles.thinkingText}>Thinking...</Text>
         </View>
       </View>
@@ -90,22 +90,29 @@ function ToolCallRow({ tool }: { tool: ToolPart }) {
   const status = tool.state?.status
   const isError = status === "error"
   const isCompleted = status === "completed"
-  const isRunning = status === "running" || status === "pending"
+  const isRunning = status === "running"
+  const isPending = status === "pending"
 
   let iconName: keyof typeof Ionicons.glyphMap = "ellipse"
   let iconColor = palette.smoke[7]
   if (isCompleted) {
-    iconName = "checkmark-circle"
+    iconName = "checkmark"
     iconColor = palette.apple[9]
   } else if (isError) {
-    iconName = "close-circle"
+    iconName = "close"
     iconColor = palette.ember[9]
   } else if (isRunning) {
     iconName = "ellipse"
     iconColor = palette.solaris[9]
   }
+  // pending keeps defaults: ellipse + smoke[7]
 
-  const title = tool.state?.title || ""
+  const title =
+    "title" in tool.state && tool.state.title
+      ? tool.state.title
+      : isError && "error" in tool.state
+        ? (tool.state as { error: string }).error
+        : ""
 
   return (
     <View style={styles.toolRow}>
@@ -143,16 +150,16 @@ const ToolCallGroup = React.memo(function ToolCallGroup({ tools }: { tools: Tool
   }, [tools])
 
   return (
-    <View style={styles.toolGroup}>
+    <View style={styles.toolGroup} accessibilityRole="summary" accessibilityState={{ expanded: !collapsed }}>
       <Pressable style={styles.toolGroupHeader} onPress={() => setCollapsed((c) => !c)}>
-        <Ionicons
-          name={collapsed ? "chevron-forward" : "chevron-down"}
-          size={12}
-          color={palette.smoke[9]}
-        />
         <Text style={styles.toolGroupHeaderText}>
           {tools.length} TOOL CALL{tools.length !== 1 ? "S" : ""}
         </Text>
+        <Ionicons
+          name={collapsed ? "chevron-forward" : "chevron-down"}
+          size={12}
+          color={palette.smoke[7]}
+        />
       </Pressable>
       {!collapsed && (
         <View style={styles.toolGroupBody}>
@@ -179,12 +186,11 @@ const MessageRow = React.memo(function MessageRow({
 
   return (
     <View style={styles.messageRow}>
-      <View style={[styles.avatar, isUser ? styles.userAvatar : styles.assistantAvatar]}>
-        {isUser ? (
-          <Ionicons name="person" size={12} color={palette.smoke[9]} />
-        ) : (
-          <Ionicons name="sparkles" size={12} color={palette.smoke[9]} />
-        )}
+      <View
+        style={[styles.avatar, isUser ? styles.userAvatar : styles.assistantAvatar]}
+        accessibilityLabel={isUser ? "You" : "Assistant"}
+      >
+        <Text style={styles.avatarText}>{isUser ? "Y" : "A"}</Text>
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.messageHeader}>
@@ -623,6 +629,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.smoke[5],
   },
+  avatarText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: palette.smoke[10],
+  },
   messageHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -649,8 +660,7 @@ const styles = StyleSheet.create({
   // --- ThinkingIndicator ---
   thinkingText: {
     fontSize: 13,
-    color: colors.text.weak,
-    fontWeight: "500",
+    color: palette.smoke[7],
   },
   // --- Tool groups ---
   toolGroup: {
@@ -664,15 +674,17 @@ const styles = StyleSheet.create({
   toolGroupHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.smoke[3],
     backgroundColor: palette.smoke[1],
   },
   toolGroupHeaderText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: palette.smoke[9],
+    fontSize: 10,
+    fontWeight: "600",
+    color: palette.smoke[7],
     letterSpacing: 0.5,
   },
   toolGroupBody: {
@@ -686,9 +698,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   toolName: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    color: palette.smoke[11],
+    color: palette.smoke[9],
   },
   toolTitle: {
     fontSize: 12,
