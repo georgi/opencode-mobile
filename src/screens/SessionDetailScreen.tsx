@@ -229,6 +229,8 @@ export default function SessionDetailScreen() {
   const setSelectedModel = useSessionStore((state) => state.setSelectedModel)
   const lastError = useSessionStore((state) => state.lastError)
   const abortSession = useSessionStore((state) => state.abortSession)
+  const revertSession = useSessionStore((state) => state.revertSession)
+  const unrevertSession = useSessionStore((state) => state.unrevertSession)
   const isAgentWorking = useSessionStore((state) => state.isAgentWorking)
   const subscribeToEvents = useSessionStore((state) => state.subscribeToEvents)
   const closeEventSource = useSessionStore((state) => state.closeEventSource)
@@ -265,7 +267,7 @@ export default function SessionDetailScreen() {
   }, [])
 
   const handleSend = async () => {
-    if (!inputText.trim() || !sessionId || isSending) {
+    if (!inputText.trim() || !sessionId || isSending || isAgentWorking) {
       return
     }
 
@@ -296,21 +298,11 @@ export default function SessionDetailScreen() {
     return { providerID: provider.id, providerName: provider.name, models }
   })
 
-  const modelOptions = providerOptions.flatMap((provider) => provider.models)
-
-  const selectedModelLabel = (() => {
-    if (!selectedModel) return "Select model"
-    const provider = providers.find((item) => item.id === selectedModel.providerID)
-    const model = provider?.models?.[selectedModel.modelID]
-    if (!provider || !model) return "Select model"
-    return `${provider.name} / ${model.name ?? selectedModel.modelID}`
-  })()
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -398,49 +390,82 @@ export default function SessionDetailScreen() {
         )}
       </View>
 
-      <View style={styles.modelBar}>
-        <Text style={styles.modelLabel}>Model</Text>
-        <Pressable
-          style={[styles.modelButton, modelOptions.length === 0 && styles.modelButtonDisabled]}
-          onPress={() => {
-            void fetchProviders()
-            setIsModelPickerOpen(true)
-          }}
-        >
-          <Text style={styles.modelButtonText}>{selectedModelLabel}</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.text.weak} />
-        </Pressable>
-      </View>
+      {lastError ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{lastError}</Text>
+        </View>
+      ) : null}
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={inputText}
-          onChangeText={setInputText}
-          onSubmitEditing={handleSend}
-          placeholder="Type a message..."
-          placeholderTextColor={colors.text.weaker}
-          selectionColor={colors.interactive.base}
-          multiline
-          maxLength={10000}
-        />
-        <Pressable
-          style={[
-            styles.sendButton,
-            (!inputText.trim() || isSending) && styles.sendButtonDisabled,
-          ]}
-          onPress={handleSend}
-          disabled={!inputText.trim() || isSending}
-        >
-          {isSending ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Text style={styles.sendButtonText}>Send</Text>
-          )}
-        </Pressable>
-      </View>
-
-      {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+      {sessionId && (
+        <View style={styles.composer}>
+          <View style={styles.composerCard}>
+            <TextInput
+              style={styles.composerInput}
+              value={inputText}
+              onChangeText={setInputText}
+              onSubmitEditing={handleSend}
+              placeholder="Type a message..."
+              placeholderTextColor={colors.text.weaker}
+              selectionColor={colors.interactive.base}
+              multiline
+              maxLength={10000}
+            />
+            <View style={styles.composerBar}>
+              <Pressable
+                style={styles.modelChip}
+                onPress={() => {
+                  void fetchProviders()
+                  setIsModelPickerOpen(true)
+                }}
+              >
+                <Text style={[styles.modelChipText, !selectedModel && styles.modelChipTextEmpty]}>
+                  {selectedModel
+                    ? (() => {
+                        const provider = providers.find((p) => p.id === selectedModel.providerID)
+                        const model = provider?.models?.[selectedModel.modelID]
+                        return model?.name ?? selectedModel.modelID
+                      })()
+                    : "No model"}
+                </Text>
+                <Ionicons name="chevron-down" size={10} color={palette.smoke[7]} />
+              </Pressable>
+              <View style={{ flex: 1 }} />
+              <Pressable
+                style={styles.composerAction}
+                onPress={() =>
+                  void revertSession(
+                    sessionId,
+                    currentSession?.revert?.messageID,
+                    currentSession?.revert?.partID
+                  )
+                }
+              >
+                <Ionicons name="arrow-undo" size={16} color={palette.smoke[7]} />
+              </Pressable>
+              <Pressable
+                style={styles.composerAction}
+                onPress={() => void unrevertSession(sessionId)}
+              >
+                <Ionicons name="arrow-redo" size={16} color={palette.smoke[7]} />
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.sendButton,
+                  (!inputText.trim() || isSending || isAgentWorking) && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSend}
+                disabled={!inputText.trim() || isSending || isAgentWorking}
+              >
+                {isSending ? (
+                  <ActivityIndicator size="small" color={palette.smoke[1]} />
+                ) : (
+                  <Ionicons name="arrow-up" size={16} color={palette.smoke[1]} />
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
 
       <Modal
         visible={isModelPickerOpen}
@@ -523,39 +548,16 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: 8,
   },
-  // --- Model bar ---
-  modelBar: {
+  // --- Error banner ---
+  errorBanner: {
+    paddingVertical: 8,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.surface.highlight,
-    backgroundColor: colors.surface.base,
-    gap: 8,
+    backgroundColor: palette.ember[2],
   },
-  modelLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.text.weak,
-  },
-  modelButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.surface.highlight,
-    backgroundColor: colors.background.base,
-  },
-  modelButtonDisabled: {
-    opacity: 0.6,
-  },
-  modelButtonText: {
-    color: colors.text.base,
+  errorText: {
+    color: palette.ember[9],
     fontSize: 13,
-    fontWeight: "600",
+    textAlign: "center",
   },
   // --- Messages ---
   messagesContainer: {
@@ -693,52 +695,67 @@ const styles = StyleSheet.create({
     color: palette.smoke[7],
     flex: 1,
   },
-  // --- Input ---
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    padding: 12,
-    gap: 8,
-    backgroundColor: colors.background.base,
+  // --- Composer ---
+  composer: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 12,
     borderTopWidth: 1,
     borderTopColor: colors.surface.highlight,
+    backgroundColor: colors.background.base,
   },
-  input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 120,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  composerCard: {
+    backgroundColor: palette.smoke[2],
     borderWidth: 1,
-    borderColor: colors.input.border,
-    borderRadius: 20,
-    fontSize: 15,
-    backgroundColor: colors.input.bg,
+    borderColor: palette.smoke[4],
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  composerInput: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+    fontSize: 14,
     color: colors.text.base,
+    minHeight: 36,
+    maxHeight: 120,
+  },
+  composerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    gap: 4,
+  },
+  modelChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: palette.smoke[3],
+    borderRadius: 6,
+  },
+  modelChipText: {
+    fontSize: 11,
+    color: palette.smoke[9],
+  },
+  modelChipTextEmpty: {
+    color: palette.smoke[7],
+  },
+  composerAction: {
+    padding: 6,
   },
   sendButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: colors.interactive.base,
-    borderRadius: 20,
-    minWidth: 70,
+    width: 30,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: palette.smoke[10],
     alignItems: "center",
     justifyContent: "center",
   },
   sendButtonDisabled: {
-    backgroundColor: colors.interactive.hover,
     opacity: 0.5,
-  },
-  sendButtonText: {
-    color: colors.text.invert,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  error: {
-    color: colors.status.error,
-    padding: 12,
-    textAlign: "center",
-    backgroundColor: palette.ember[2],
   },
   // --- Modal ---
   modalBackdrop: {
