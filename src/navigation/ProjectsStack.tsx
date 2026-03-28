@@ -47,7 +47,7 @@ export default function ProjectsStack() {
       <Stack.Screen
         name="SessionDetail"
         component={SessionDetailScreen}
-        options={{ title: "Session" }}
+        options={{ title: "Session", headerShown: false }}
       />
       <Stack.Screen name="Review" component={ReviewScreen} />
       <Stack.Screen name="Share" component={ShareScreen} />
