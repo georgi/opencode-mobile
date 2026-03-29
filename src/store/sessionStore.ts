@@ -157,29 +157,9 @@ const resolveData = <TData>(result: ResultFields<TData>) => {
 
 const getMessageTimestamp = (message: Message) => message.time?.created ?? 0
 
-const sortMessages = (messages: Message[]) => {
-  // Build order from parentID chain (linked list: each message points to its predecessor)
-  const byId = new Map(messages.map((m) => [m.id, m]))
-  const ordered: Message[] = []
-  const used = new Set<string>()
-
-  // Find the tail (message with no children = newest)
-  const childOf = new Set(messages.map((m) => m.parentID).filter(Boolean))
-  let current = messages.find((m) => !childOf.has(m.id))
-
-  // Walk the chain from newest to oldest
-  while (current && !used.has(current.id)) {
-    ordered.push(current)
-    used.add(current.id)
-    current = current.parentID ? byId.get(current.parentID) : undefined
-  }
-
-  // Append any orphans not in the chain (sorted by timestamp as fallback)
-  const orphans = messages.filter((m) => !used.has(m.id))
-  orphans.sort((a, b) => getMessageTimestamp(b) - getMessageTimestamp(a))
-
-  return [...ordered, ...orphans]
-}
+// Newest-first: inverted FlashList renders index 0 at visual bottom (newest)
+const sortMessages = (messages: Message[]) =>
+  [...messages].sort((a, b) => getMessageTimestamp(b) - getMessageTimestamp(a))
 
 const upsertMessage = (messages: Message[], message: Message) => {
   const index = messages.findIndex((item) => item.id === message.id)
