@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import Zeroconf from "react-native-zeroconf"
 import { useSessionStore, type ServerConfig } from "../store/sessionStore"
 import { colors, palette } from "../constants/theme"
 
@@ -21,7 +20,13 @@ type DiscoveredServer = {
   address: string
 }
 
-const zeroconf = new Zeroconf()
+let zeroconf: any = null
+try {
+  const Zeroconf = require("react-native-zeroconf").default
+  if (Zeroconf) zeroconf = new Zeroconf()
+} catch {
+  // native module not available (Expo Go)
+}
 
 const defaultBaseUrl = "https://api.opencode.ai"
 
@@ -54,7 +59,10 @@ export default function SettingsScreen() {
   const [directory, setDirectory] = useState("")
   const [basicAuth, setBasicAuth] = useState("")
 
+  const canScan = zeroconf !== null
+
   const startScan = () => {
+    if (!zeroconf) return
     setDiscovered([])
     setIsScanning(true)
     zeroconf.scan("http", "tcp", "local.")
@@ -65,6 +73,7 @@ export default function SettingsScreen() {
   }
 
   useEffect(() => {
+    if (!zeroconf) return
     const onResolved = (service: any) => {
       if (!service.name?.startsWith("opencode-")) return
       const address = service.addresses?.[0] ?? service.host
@@ -175,17 +184,19 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      <View style={styles.scanHeader}>
-        <Text style={styles.label}>Discover on LAN</Text>
-        <Pressable onPress={startScan} disabled={isScanning} style={styles.scanButton}>
-          {isScanning ? (
-            <ActivityIndicator size="small" color={palette.smoke[7]} />
-          ) : (
-            <Ionicons name="search" size={16} color={palette.smoke[7]} />
-          )}
-          <Text style={styles.scanButtonText}>{isScanning ? "Scanning..." : "Scan"}</Text>
-        </Pressable>
-      </View>
+      {canScan && (
+        <View style={styles.scanHeader}>
+          <Text style={styles.label}>Discover on LAN</Text>
+          <Pressable onPress={startScan} disabled={isScanning} style={styles.scanButton}>
+            {isScanning ? (
+              <ActivityIndicator size="small" color={palette.smoke[7]} />
+            ) : (
+              <Ionicons name="search" size={16} color={palette.smoke[7]} />
+            )}
+            <Text style={styles.scanButtonText}>{isScanning ? "Scanning..." : "Scan"}</Text>
+          </Pressable>
+        </View>
+      )}
       {discovered.length > 0 && (
         <View style={styles.discoveredList}>
           {discovered.map((server) => (
@@ -209,7 +220,7 @@ export default function SettingsScreen() {
           ))}
         </View>
       )}
-      {isScanning && discovered.length === 0 && (
+      {canScan && isScanning && discovered.length === 0 && (
         <Text style={styles.scanHint}>Looking for OpenCode servers...</Text>
       )}
 
