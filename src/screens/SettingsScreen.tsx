@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
+import * as Network from "expo-network"
 import { useSessionStore, type ServerConfig } from "../store/sessionStore"
 import { colors, palette } from "../constants/theme"
 
@@ -26,6 +27,41 @@ try {
   if (Zeroconf) zeroconf = new Zeroconf()
 } catch {
   // native module not available (Expo Go)
+}
+
+const SCAN_PORTS = [4096, 4097, 4098, 4099, 4100]
+
+async function scanSubnet(
+  onFound: (server: DiscoveredServer) => void,
+  signal: AbortSignal,
+) {
+  const ip = await Network.getIpAddressAsync()
+  if (!ip) return
+  const subnet = ip.split(".").slice(0, 3).join(".")
+
+  const checks: Promise<void>[] = []
+  for (let i = 1; i <= 254; i++) {
+    if (signal.aborted) break
+    const host = `${subnet}.${i}`
+    for (const port of SCAN_PORTS) {
+      checks.push(
+        fetch(`http://${host}:${port}/global/health`, { signal, method: "GET" })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.healthy && data?.version) {
+              onFound({
+                name: `opencode ${data.version}`,
+                host,
+                port,
+                address: host,
+              })
+            }
+          })
+          .catch(() => {}),
+      )
+    }
+  }
+  await Promise.all(checks)
 }
 
 const defaultBaseUrl = "https://api.opencode.ai"
@@ -59,17 +95,37 @@ export default function SettingsScreen() {
   const [directory, setDirectory] = useState("")
   const [basicAuth, setBasicAuth] = useState("")
 
-  const canScan = zeroconf !== null
+  const scanAbortRef = useRef<AbortController | null>(null)
+
+  const addDiscovered = (server: DiscoveredServer) => {
+    setDiscovered((prev) => {
+      if (prev.some((s) => s.address === server.address && s.port === server.port)) return prev
+      return [...prev, server]
+    })
+  }
 
   const startScan = () => {
-    if (!zeroconf) return
+    scanAbortRef.current?.abort()
     setDiscovered([])
     setIsScanning(true)
-    zeroconf.scan("http", "tcp", "local.")
-    setTimeout(() => {
-      zeroconf.stop()
-      setIsScanning(false)
-    }, 5000)
+
+    if (zeroconf) {
+      // mDNS path
+      zeroconf.scan("http", "tcp", "local.")
+      setTimeout(() => {
+        zeroconf.stop()
+        setIsScanning(false)
+      }, 5000)
+    } else {
+      // Network scan fallback
+      const abort = new AbortController()
+      scanAbortRef.current = abort
+      const timeout = setTimeout(() => abort.abort(), 10000)
+      scanSubnet(addDiscovered, abort.signal).finally(() => {
+        clearTimeout(timeout)
+        setIsScanning(false)
+      })
+    }
   }
 
   useEffect(() => {
@@ -78,16 +134,17 @@ export default function SettingsScreen() {
       if (!service.name?.startsWith("opencode-")) return
       const address = service.addresses?.[0] ?? service.host
       if (!address) return
-      setDiscovered((prev) => {
-        if (prev.some((s) => s.address === address && s.port === service.port)) return prev
-        return [...prev, { name: service.name, host: service.host, port: service.port, address }]
-      })
+      addDiscovered({ name: service.name, host: service.host, port: service.port, address })
     }
     zeroconf.on("resolved", onResolved)
     return () => {
       zeroconf.removeListener("resolved", onResolved)
       zeroconf.stop()
     }
+  }, [])
+
+  useEffect(() => {
+    return () => scanAbortRef.current?.abort()
   }, [])
 
   const canSave = label.trim().length > 0 && baseUrl.trim().length > 0 && directory.trim().length > 0
@@ -184,19 +241,17 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      {canScan && (
-        <View style={styles.scanHeader}>
-          <Text style={styles.label}>Discover on LAN</Text>
-          <Pressable onPress={startScan} disabled={isScanning} style={styles.scanButton}>
-            {isScanning ? (
-              <ActivityIndicator size="small" color={palette.smoke[7]} />
-            ) : (
-              <Ionicons name="search" size={16} color={palette.smoke[7]} />
-            )}
-            <Text style={styles.scanButtonText}>{isScanning ? "Scanning..." : "Scan"}</Text>
-          </Pressable>
-        </View>
-      )}
+      <View style={styles.scanHeader}>
+        <Text style={styles.label}>Discover on LAN</Text>
+        <Pressable onPress={startScan} disabled={isScanning} style={styles.scanButton}>
+          {isScanning ? (
+            <ActivityIndicator size="small" color={palette.smoke[7]} />
+          ) : (
+            <Ionicons name="search" size={16} color={palette.smoke[7]} />
+          )}
+          <Text style={styles.scanButtonText}>{isScanning ? "Scanning..." : "Scan"}</Text>
+        </Pressable>
+      </View>
       {discovered.length > 0 && (
         <View style={styles.discoveredList}>
           {discovered.map((server) => (
@@ -220,7 +275,7 @@ export default function SettingsScreen() {
           ))}
         </View>
       )}
-      {canScan && isScanning && discovered.length === 0 && (
+      {isScanning && discovered.length === 0 && (
         <Text style={styles.scanHint}>Looking for OpenCode servers...</Text>
       )}
 

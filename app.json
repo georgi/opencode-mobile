@@ -13,6 +13,12 @@
     "jsEngine": "hermes",
     "plugins": [
       "expo-secure-store"
-    ]
+    ],
+    "android": {
+      "package": "com.anonymous.expoclient"
+    },
+    "ios": {
+      "bundleIdentifier": "com.anonymous.expoclient"
+    }
   }
 }
