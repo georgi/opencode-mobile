@@ -247,6 +247,7 @@ export default function SessionDetailScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false)
+  const [modelSearch, setModelSearch] = useState("")
   const flatListRef = useRef<FlashListRef<Message>>(null)
 
   useEffect(() => {
@@ -477,39 +478,60 @@ export default function SessionDetailScreen() {
         visible={isModelPickerOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setIsModelPickerOpen(false)}
+        onRequestClose={() => { setIsModelPickerOpen(false); setModelSearch("") }}
       >
         <View style={styles.modalBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsModelPickerOpen(false)} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setIsModelPickerOpen(false); setModelSearch("") }} />
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Select model</Text>
+            <TextInput
+              style={styles.modalSearch}
+              value={modelSearch}
+              onChangeText={setModelSearch}
+              placeholder="Search models..."
+              placeholderTextColor={colors.text.weaker}
+              autoFocus
+            />
             <View style={styles.modalList}>
-              <ScrollView style={{ maxHeight: 300 }}>
-                {providerOptions.map((provider) => (
-                <View key={provider.providerID} style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>{provider.providerName}</Text>
-                  {provider.models.length === 0 ? (
-                    <Text style={styles.modalEmpty}>No models available</Text>
-                  ) : (
-                    provider.models.map((option) => {
-                      const isSelected =
-                        selectedModel?.providerID === option.providerID && selectedModel?.modelID === option.modelID
-                      return (
-                        <Pressable
-                          key={`${option.providerID}/${option.modelID}`}
-                          style={[styles.modalItem, isSelected && styles.modalItemActive]}
-                          onPress={() => {
-                            setSelectedModel({ providerID: option.providerID, modelID: option.modelID })
-                            setIsModelPickerOpen(false)
-                          }}
-                        >
-                          <Text style={styles.modalItemText}>{option.label}</Text>
-                        </Pressable>
+              <ScrollView style={{ maxHeight: 300 }} keyboardShouldPersistTaps="handled">
+                {providerOptions.map((provider) => {
+                  const query = modelSearch.toLowerCase()
+                  const filtered = query
+                    ? provider.models.filter(
+                        (m) =>
+                          m.label.toLowerCase().includes(query) ||
+                          m.modelID.toLowerCase().includes(query) ||
+                          provider.providerName.toLowerCase().includes(query)
                       )
-                    })
-                  )}
-                </View>
-              ))}
+                    : provider.models
+                  if (query && filtered.length === 0) return null
+                  return (
+                    <View key={provider.providerID} style={styles.modalSection}>
+                      <Text style={styles.modalSectionTitle}>{provider.providerName}</Text>
+                      {filtered.length === 0 ? (
+                        <Text style={styles.modalEmpty}>No models available</Text>
+                      ) : (
+                        filtered.map((option) => {
+                          const isSelected =
+                            selectedModel?.providerID === option.providerID && selectedModel?.modelID === option.modelID
+                          return (
+                            <Pressable
+                              key={`${option.providerID}/${option.modelID}`}
+                              style={[styles.modalItem, isSelected && styles.modalItemActive]}
+                              onPress={() => {
+                                setSelectedModel({ providerID: option.providerID, modelID: option.modelID })
+                                setIsModelPickerOpen(false)
+                                setModelSearch("")
+                              }}
+                            >
+                              <Text style={styles.modalItemText}>{option.label}</Text>
+                            </Pressable>
+                          )
+                        })
+                      )}
+                    </View>
+                  )
+                })}
               {providers.length === 0 ? <Text style={styles.modalEmpty}>No providers available</Text> : null}
               </ScrollView>
             </View>
@@ -791,6 +813,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: colors.text.base,
+  },
+  modalSearch: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.surface.highlight,
+    borderRadius: 8,
+    fontSize: 14,
+    color: colors.text.base,
+    backgroundColor: colors.surface.base,
   },
   modalList: {
     gap: 8,
