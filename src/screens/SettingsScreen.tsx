@@ -24,7 +24,13 @@ type DiscoveredServer = {
 let zeroconf: any = null
 try {
   const Zeroconf = require("react-native-zeroconf").default
-  if (Zeroconf) zeroconf = new Zeroconf()
+  if (Zeroconf) {
+    const instance = new Zeroconf()
+    // Verify the native module is actually functional
+    if (instance && typeof instance.scan === "function") {
+      zeroconf = instance
+    }
+  }
 } catch {
   // native module not available (Expo Go)
 }
