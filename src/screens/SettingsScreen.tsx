@@ -80,14 +80,17 @@ export default function SettingsScreen() {
       ) : (
         <View style={styles.serverList}>
           {servers.map((server) => {
-            const isSelected = server.id === currentServerId
+            const isActive = server.id === currentServerId
             return (
               <View key={server.id} style={styles.serverRow}>
                 <Pressable
                   onPress={() => void selectServer(server.id)}
-                  style={[styles.serverSelect, isSelected && styles.serverSelectActive]}
+                  style={[styles.serverCard, isActive && styles.serverCardActive]}
                 >
-                  <Text style={styles.serverLabel}>{server.label}</Text>
+                  <View style={styles.serverLabelRow}>
+                    {isActive && <View style={styles.activeDot} />}
+                    <Text style={styles.serverName}>{server.label}</Text>
+                  </View>
                   <Text style={styles.serverMeta}>{server.baseUrl}</Text>
                   <Text style={styles.serverMeta}>{server.directory}</Text>
                 </Pressable>
@@ -101,7 +104,6 @@ export default function SettingsScreen() {
                       setDirectory(server.directory)
                       setBasicAuth(server.basicAuth)
                     }}
-                    style={styles.editButton}
                   >
                     <Text style={styles.editText}>Edit</Text>
                   </Pressable>
@@ -121,9 +123,8 @@ export default function SettingsScreen() {
                         ]
                       )
                     }}
-                    style={styles.deleteButton}
                   >
-                    <Text style={styles.deleteText}>Remove</Text>
+                    <Text style={styles.removeText}>Remove</Text>
                   </Pressable>
                 </View>
               </View>
@@ -139,14 +140,14 @@ export default function SettingsScreen() {
         value={label}
         onChangeText={setLabel}
         placeholder="Label (e.g. Work)"
-        placeholderTextColor={colors.text.weaker}
+        placeholderTextColor={palette.smoke[7]}
       />
       <TextInput
         style={styles.input}
         value={baseUrl}
         onChangeText={setBaseUrl}
         placeholder="Base URL"
-        placeholderTextColor={colors.text.weaker}
+        placeholderTextColor={palette.smoke[7]}
         autoCapitalize="none"
       />
       <TextInput
@@ -154,7 +155,7 @@ export default function SettingsScreen() {
         value={directory}
         onChangeText={setDirectory}
         placeholder="Directory"
-        placeholderTextColor={colors.text.weaker}
+        placeholderTextColor={palette.smoke[7]}
         autoCapitalize="none"
       />
       <TextInput
@@ -162,7 +163,7 @@ export default function SettingsScreen() {
         value={basicAuth}
         onChangeText={setBasicAuth}
         placeholder="Basic auth token"
-        placeholderTextColor={colors.text.weaker}
+        placeholderTextColor={palette.smoke[7]}
         autoCapitalize="none"
         secureTextEntry
       />
@@ -206,22 +207,22 @@ const styles = StyleSheet.create({
     color: colors.text.base,
   },
   label: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
     marginTop: 12,
-    color: colors.text.weak,
+    color: palette.smoke[7],
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
   text: {
     color: colors.text.base,
   },
   input: {
-    borderWidth: 1,
-    borderColor: colors.input.border,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    color: colors.text.base,
-    backgroundColor: colors.input.bg,
+    color: palette.smoke[11],
+    backgroundColor: palette.smoke[2],
   },
   serverList: {
     gap: 8,
@@ -231,20 +232,28 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: "stretch",
   },
-  serverSelect: {
+  serverCard: {
     flex: 1,
     padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.surface.highlight,
-    backgroundColor: colors.surface.base,
+    borderRadius: 12,
+    backgroundColor: palette.smoke[2],
     gap: 2,
   },
-  serverSelectActive: {
-    backgroundColor: palette.cobalt[2],
-    borderColor: palette.cobalt[5],
+  serverCardActive: {
+    backgroundColor: palette.smoke[3],
   },
-  serverLabel: {
+  serverLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: palette.smoke[9],
+  },
+  serverName: {
     fontSize: 16,
     fontWeight: "600",
     color: colors.text.base,
@@ -257,57 +266,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
-  editButton: {
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.surface.highlight,
-    backgroundColor: colors.surface.base,
-  },
   editText: {
-    color: colors.text.base,
+    color: palette.smoke[9],
     fontWeight: "600",
   },
-  deleteButton: {
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.ember[4],
-    backgroundColor: palette.ember[2],
-  },
-  deleteText: {
-    color: colors.status.error,
+  removeText: {
+    color: palette.ember[9],
     fontWeight: "600",
   },
   saveButton: {
     marginTop: 8,
     paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: colors.interactive.base,
+    borderRadius: 12,
+    backgroundColor: palette.smoke[10],
     alignItems: "center",
   },
   saveButtonDisabled: {
-    backgroundColor: colors.interactive.hover,
     opacity: 0.5,
   },
   saveText: {
-    color: colors.text.invert,
+    color: palette.smoke[1],
     fontWeight: "600",
   },
   cancelButton: {
     paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.surface.highlight,
-    backgroundColor: colors.surface.base,
     alignItems: "center",
   },
   cancelText: {
-    color: colors.text.base,
+    color: palette.smoke[7],
     fontWeight: "600",
   },
 })
