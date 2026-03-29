@@ -214,6 +214,9 @@ const upsertPart = (parts: Part[], incoming: Part, delta?: string) => {
 }
 
 export const useSessionStore = create<SessionState & SessionActions>((set, get) => {
+  const getSessionDirectory = () =>
+    get().currentSession?.directory ?? get().currentProject?.worktree ?? get().currentServer?.directory
+
   const ensureClient = () => {
     const { client, isOffline } = get()
 
@@ -642,7 +645,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.provider.list({ directory })
       const data = resolveData(result)
 
@@ -728,7 +731,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       }
 
       set({ isAgentWorking: true })
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const selectedModel = get().selectedModel
 
       const parts: TextPartInput[] = [{ type: "text", text }]
@@ -764,7 +767,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.session.messages({ sessionID: sessionId, directory })
       const data = resolveData(result)
 
@@ -788,7 +791,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.session.abort({ sessionID: sessionId, directory })
       const data = resolveData(result)
 
@@ -805,7 +808,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.session.revert({
         sessionID: sessionId,
         directory,
@@ -827,7 +830,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.session.unrevert({ sessionID: sessionId, directory })
       const data = resolveData(result)
 
@@ -846,7 +849,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
       set({ isDiffsLoading: true, diffsError: undefined })
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.session.diff({ sessionID: sessionId, directory })
       const diffs = resolveData(result)
 
@@ -864,7 +867,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return false
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.session.summarize({ sessionID: sessionId, directory })
       const data = resolveData(result)
 
@@ -882,7 +885,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.permission.list({ directory })
       const permissions = resolveData(result)
 
@@ -900,7 +903,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return false
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.permission.reply({
         requestID: requestId,
         directory,
@@ -928,7 +931,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.session.share({ sessionID: sessionId, directory })
       const session = resolveData(result)
 
@@ -946,7 +949,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentProject?.worktree ?? get().currentServer?.directory
+      const directory = getSessionDirectory()
       const result = await client.session.unshare({ sessionID: sessionId, directory })
       const session = resolveData(result)
 
