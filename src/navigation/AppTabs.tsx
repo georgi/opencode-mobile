@@ -2,14 +2,12 @@ import React from "react"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Ionicons } from "@expo/vector-icons"
 import ProjectsStack from "./ProjectsStack"
-import SessionsScreen from "../screens/SessionsScreen"
 import NotificationsScreen from "../screens/NotificationsScreen"
 import SettingsScreen from "../screens/SettingsScreen"
 import { colors } from "../constants/theme"
 
 export type AppTabParamList = {
   Projects: undefined
-  Sessions: undefined
   Notifications: undefined
   Settings: undefined
 }
@@ -45,8 +43,6 @@ export default function AppTabs() {
 
           if (route.name === "Projects") {
             iconName = focused ? "folder" : "folder-outline"
-          } else if (route.name === "Sessions") {
-            iconName = focused ? "chatbubbles" : "chatbubbles-outline"
           } else if (route.name === "Notifications") {
             iconName = focused ? "notifications" : "notifications-outline"
           } else if (route.name === "Settings") {
@@ -63,7 +59,6 @@ export default function AppTabs() {
         component={ProjectsStack}
         options={{ headerShown: false }}
       />
-      <Tab.Screen name="Sessions" component={SessionsScreen} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
