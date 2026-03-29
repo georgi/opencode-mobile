@@ -157,9 +157,9 @@ const resolveData = <TData>(result: ResultFields<TData>) => {
 
 const getMessageTimestamp = (message: Message) => message.time?.created ?? 0
 
-// Newest-first: inverted FlashList renders index 0 at visual bottom (newest)
+// Oldest-first: inverted FlashList renders last index at visual top (oldest)
 const sortMessages = (messages: Message[]) =>
-  [...messages].sort((a, b) => getMessageTimestamp(b) - getMessageTimestamp(a))
+  [...messages].sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b))
 
 const upsertMessage = (messages: Message[], message: Message) => {
   const index = messages.findIndex((item) => item.id === message.id)
