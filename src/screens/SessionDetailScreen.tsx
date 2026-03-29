@@ -67,18 +67,10 @@ function groupParts(parts: Part[]): PartSegment[] {
 
 const ThinkingIndicator = React.memo(function ThinkingIndicator() {
   return (
-    <View style={styles.messageRow}>
-      <View style={[styles.avatar, styles.assistantAvatar]} accessibilityLabel="Assistant">
-        <Text style={styles.avatarText}>A</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <View style={styles.messageHeader}>
-          <Text style={[styles.messageName, styles.assistantName]}>Assistant</Text>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <ActivityIndicator size="small" color={palette.smoke[7]} />
-          <Text style={styles.thinkingText}>Thinking...</Text>
-        </View>
+    <View style={styles.assistantRow}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <ActivityIndicator size="small" color={palette.smoke[7]} />
+        <Text style={styles.thinkingText}>Thinking...</Text>
       </View>
     </View>
   )
@@ -86,26 +78,18 @@ const ThinkingIndicator = React.memo(function ThinkingIndicator() {
 
 // --- ToolCallRow ---
 
-function ToolCallRow({ tool }: { tool: ToolPart }) {
+function ToolCallRow({ tool, onPress }: { tool: ToolPart; onPress: () => void }) {
   const status = tool.state?.status
   const isError = status === "error"
-  const isCompleted = status === "completed"
   const isRunning = status === "running"
-  const isPending = status === "pending"
 
-  let iconName: keyof typeof Ionicons.glyphMap = "ellipse"
-  let iconColor = palette.smoke[7]
-  if (isCompleted) {
-    iconName = "checkmark"
-    iconColor = palette.apple[9]
-  } else if (isError) {
-    iconName = "close"
-    iconColor = palette.ember[9]
-  } else if (isRunning) {
-    iconName = "ellipse"
-    iconColor = palette.solaris[9]
-  }
-  // pending keeps defaults: ellipse + smoke[7]
+  const statusColor = isError
+    ? palette.ember[9]
+    : status === "completed"
+      ? palette.smoke[7]
+      : isRunning
+        ? palette.solaris[9]
+        : palette.smoke[6]
 
   const title =
     "title" in tool.state && tool.state.title
@@ -115,60 +99,81 @@ function ToolCallRow({ tool }: { tool: ToolPart }) {
         : ""
 
   return (
-    <View style={styles.toolRow}>
-      <Ionicons name={iconName} size={14} color={iconColor} />
+    <Pressable style={styles.toolRow} onPress={onPress}>
+      <Ionicons name="chevron-forward" size={12} color={statusColor} />
       <Text
-        style={[
-          styles.toolName,
-          isError && { color: palette.ember[11] },
-        ]}
+        style={[styles.toolName, isError && { color: palette.ember[11] }]}
         numberOfLines={1}
       >
         {tool.tool}
       </Text>
       {title ? (
-        <Text style={styles.toolTitle} numberOfLines={1}>
-          {title}
-        </Text>
+        <Text style={styles.toolTitle} numberOfLines={1}>{title}</Text>
       ) : null}
-    </View>
+      {isRunning && <ActivityIndicator size="small" color={palette.solaris[9]} style={{ marginLeft: 4 }} />}
+    </Pressable>
   )
 }
 
 // --- ToolCallGroup ---
 
 const ToolCallGroup = React.memo(function ToolCallGroup({ tools }: { tools: ToolPart[] }) {
-  const allCompleted = tools.every((t) => t.state?.status === "completed")
-  const [collapsed, setCollapsed] = useState(allCompleted)
-
-  // Auto-expand when any tool is running/pending
-  useEffect(() => {
-    const anyActive = tools.some(
-      (t) => t.state?.status === "running" || t.state?.status === "pending"
-    )
-    if (anyActive) setCollapsed(false)
-  }, [tools])
+  const [selectedTool, setSelectedTool] = useState<ToolPart | null>(null)
 
   return (
-    <View style={styles.toolGroup} accessibilityRole="summary" accessibilityState={{ expanded: !collapsed }}>
-      <Pressable style={styles.toolGroupHeader} onPress={() => setCollapsed((c) => !c)}>
-        <Text style={styles.toolGroupHeaderText}>
-          {tools.length} TOOL CALL{tools.length !== 1 ? "S" : ""}
-        </Text>
-        <Ionicons
-          name={collapsed ? "chevron-forward" : "chevron-down"}
-          size={12}
-          color={palette.smoke[7]}
-        />
-      </Pressable>
-      {!collapsed && (
-        <View style={styles.toolGroupBody}>
-          {tools.map((tool, i) => (
-            <ToolCallRow key={`${tool.tool}-${i}`} tool={tool} />
-          ))}
+    <>
+      <View style={styles.toolGroup}>
+        {tools.map((tool, i) => (
+          <ToolCallRow key={`${tool.tool}-${i}`} tool={tool} onPress={() => setSelectedTool(tool)} />
+        ))}
+      </View>
+      <Modal
+        visible={selectedTool !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedTool(null)}
+      >
+        <View style={styles.toolOverlayBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedTool(null)} />
+          <View style={styles.toolOverlayCard}>
+            <View style={styles.toolOverlayHeader}>
+              <Text style={styles.toolOverlayTitle}>{selectedTool?.tool}</Text>
+              <Pressable onPress={() => setSelectedTool(null)}>
+                <Ionicons name="close" size={20} color={palette.smoke[9]} />
+              </Pressable>
+            </View>
+            {selectedTool?.state && "input" in selectedTool.state && (
+              <View style={styles.toolOverlaySection}>
+                <Text style={styles.toolOverlaySectionTitle}>Input</Text>
+                <ScrollView style={styles.toolOverlayScroll}>
+                  <Text style={styles.toolOverlayCode}>
+                    {typeof selectedTool.state.input === "string"
+                      ? selectedTool.state.input
+                      : JSON.stringify(selectedTool.state.input, null, 2)}
+                  </Text>
+                </ScrollView>
+              </View>
+            )}
+            {selectedTool?.state?.status === "completed" && "output" in selectedTool.state && (
+              <View style={styles.toolOverlaySection}>
+                <Text style={styles.toolOverlaySectionTitle}>Output</Text>
+                <ScrollView style={styles.toolOverlayScroll}>
+                  <Text style={styles.toolOverlayCode}>{selectedTool.state.output}</Text>
+                </ScrollView>
+              </View>
+            )}
+            {selectedTool?.state?.status === "error" && "error" in selectedTool.state && (
+              <View style={styles.toolOverlaySection}>
+                <Text style={[styles.toolOverlaySectionTitle, { color: palette.ember[9] }]}>Error</Text>
+                <Text style={[styles.toolOverlayCode, { color: palette.ember[11] }]}>
+                  {(selectedTool.state as { error: string }).error}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-      )}
-    </View>
+      </Modal>
+    </>
   )
 })
 
@@ -184,34 +189,29 @@ const MessageRow = React.memo(function MessageRow({
   const isUser = message.role === "user"
   const segments = groupParts(parts)
 
+  if (isUser) {
+    const text = segments.map((s) => (s.type === "text" ? s.text : "")).join("\n").trim()
+    return (
+      <View style={styles.userRow}>
+        <View style={styles.userBubble}>
+          <Text style={styles.userBubbleText}>{text}</Text>
+        </View>
+      </View>
+    )
+  }
+
   return (
-    <View style={styles.messageRow}>
-      <View
-        style={[styles.avatar, isUser ? styles.userAvatar : styles.assistantAvatar]}
-        accessibilityLabel={isUser ? "You" : "Assistant"}
-      >
-        <Text style={styles.avatarText}>{isUser ? "Y" : "A"}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <View style={styles.messageHeader}>
-          <Text style={[styles.messageName, isUser ? styles.userName : styles.assistantName]}>
-            {isUser ? "You" : "Assistant"}
-          </Text>
-          <Text style={styles.messageTimestamp}>{formatTimestamp(message.time.created)}</Text>
-        </View>
-        <View style={styles.messageBody}>
-          {segments.map((seg, i) => {
-            if (seg.type === "text") {
-              return (
-                <Markdown key={i} style={markdownStyles}>
-                  {seg.text}
-                </Markdown>
-              )
-            }
-            return <ToolCallGroup key={i} tools={seg.tools} />
-          })}
-        </View>
-      </View>
+    <View style={styles.assistantRow}>
+      {segments.map((seg, i) => {
+        if (seg.type === "text") {
+          return (
+            <Markdown key={i} style={markdownStyles}>
+              {seg.text}
+            </Markdown>
+          )
+        }
+        return <ToolCallGroup key={i} tools={seg.tools} />
+      })}
     </View>
   )
 })
@@ -657,104 +657,100 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  // --- MessageRow ---
-  messageRow: {
+  // --- User messages (right-aligned bubbles) ---
+  userRow: {
     flexDirection: "row",
-    gap: 6,
-    paddingVertical: 10,
+    justifyContent: "flex-end",
+    paddingVertical: 6,
   },
-  avatar: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  userAvatar: {
-    backgroundColor: palette.smoke[4],
-  },
-  assistantAvatar: {
+  userBubble: {
+    maxWidth: "80%",
     backgroundColor: palette.smoke[3],
-    borderWidth: 1,
-    borderColor: palette.smoke[5],
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
   },
-  avatarText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: palette.smoke[10],
-  },
-  messageHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
-  },
-  messageName: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  userName: {
+  userBubbleText: {
+    fontSize: 14,
+    lineHeight: 20,
     color: palette.smoke[11],
   },
-  assistantName: {
-    color: palette.smoke[10],
-  },
-  messageTimestamp: {
-    fontSize: 11,
-    color: palette.smoke[7],
-  },
-  messageBody: {
-    marginLeft: 0, // content is already indented by avatar (22) + gap (6) = 28
+  // --- Assistant messages (full width, no chrome) ---
+  assistantRow: {
+    paddingVertical: 8,
   },
   // --- ThinkingIndicator ---
   thinkingText: {
     fontSize: 13,
     color: palette.smoke[7],
   },
-  // --- Tool groups ---
+  // --- Tool calls (light, no border) ---
   toolGroup: {
-    backgroundColor: palette.smoke[2],
-    borderWidth: 1,
-    borderColor: palette.smoke[4],
-    borderRadius: 8,
-    marginTop: 6,
-    overflow: "hidden",
-  },
-  toolGroupHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.smoke[3],
-    backgroundColor: palette.smoke[1],
-  },
-  toolGroupHeaderText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: palette.smoke[7],
-    letterSpacing: 0.5,
-  },
-  toolGroupBody: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    marginVertical: 4,
   },
   toolRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
+    gap: 4,
+    paddingVertical: 3,
   },
   toolName: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    color: palette.smoke[9],
+    color: palette.smoke[7],
   },
   toolTitle: {
     fontSize: 12,
-    color: palette.smoke[7],
+    color: palette.smoke[6],
     flex: 1,
+  },
+  // --- Tool overlay ---
+  toolOverlayBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  toolOverlayCard: {
+    backgroundColor: colors.background.base,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: "80%",
+    padding: 16,
+    gap: 12,
+  },
+  toolOverlayHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  toolOverlayTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: colors.text.base,
+  },
+  toolOverlaySection: {
+    gap: 6,
+  },
+  toolOverlaySectionTitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: palette.smoke[7],
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  toolOverlayScroll: {
+    maxHeight: 200,
+    backgroundColor: palette.smoke[2],
+    borderRadius: 8,
+    padding: 10,
+  },
+  toolOverlayCode: {
+    fontSize: 12,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: palette.smoke[10],
+    lineHeight: 18,
   },
   // --- Composer ---
   composer: {
