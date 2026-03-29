@@ -1,21 +1,38 @@
-import React, { useEffect, useLayoutEffect } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
+  RefreshControl,
 } from "react-native"
 import { FlashList } from "@shopify/flash-list"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { colors, palette } from "../constants/theme"
+import { palette } from "../constants/theme"
+
+function relativeTime(timestamp: number): string {
+  const now = Date.now()
+  const diff = now - timestamp
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return "just now"
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(timestamp).toLocaleDateString()
+}
 
 export default function SessionsListScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<ProjectsStackParamList>>()
+  const insets = useSafeAreaInsets()
   const currentProject = useSessionStore((state) => state.currentProject)
   const currentSession = useSessionStore((state) => state.currentSession)
   const sessions = useSessionStore((state) => state.sessions)
@@ -23,6 +40,7 @@ export default function SessionsListScreen() {
   const fetchSessions = useSessionStore((state) => state.fetchSessions)
   const setSession = useSessionStore((state) => state.setSession)
   const lastError = useSessionStore((state) => state.lastError)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (!currentProject) {
@@ -32,11 +50,11 @@ export default function SessionsListScreen() {
     void fetchSessions()
   }, [currentProject, fetchSessions])
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: currentProject?.worktree?.replace(/\/$/, "").split("/").pop() ?? "",
-    })
-  }, [currentProject, navigation])
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await fetchSessions()
+    setRefreshing(false)
+  }, [fetchSessions])
 
   const handleCreate = async () => {
     const sessionDirectory =
@@ -58,34 +76,75 @@ export default function SessionsListScreen() {
     navigation.navigate("SessionDetail", { sessionId: selected.id })
   }
 
+  const projectName =
+    currentProject?.name ??
+    currentProject?.worktree?.replace(/\/$/, "").split("/").pop() ??
+    "Sessions"
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Custom header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Pressable style={styles.headerButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={22} color={palette.smoke[11]} />
+          </Pressable>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {projectName}
+          </Text>
+        </View>
+      </View>
+
+      {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+
       {!currentProject ? (
-        <Text style={{ color: colors.text.base }}>Select a project to view sessions.</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Select a project to view sessions.</Text>
+        </View>
       ) : sessions.length === 0 ? (
-        <Text style={{ color: colors.text.base }}>No sessions loaded</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>No sessions yet</Text>
+          <Text style={styles.emptySubtitle}>Start your first session</Text>
+        </View>
       ) : (
         <FlashList
           data={sessions}
           keyExtractor={(session: Session) => session.id}
+          estimatedItemSize={56}
           contentContainerStyle={styles.sessionList as never}
-          renderItem={({ item }: { item: Session }) => {
-            const isSelected = item.id === currentSession?.id
-            return (
-              <Pressable
-                onPress={() => handleSelectSession(item.id)}
-                style={[styles.sessionItem, isSelected && styles.sessionItemActive]}
-              >
-                <Text style={styles.sessionTitle}>{item.title}</Text>
-              </Pressable>
-            )
-          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              tintColor={palette.smoke[7]}
+            />
+          }
+          renderItem={({ item }: { item: Session }) => (
+            <Pressable
+              onPress={() => handleSelectSession(item.id)}
+              style={styles.sessionItem}
+            >
+              <View style={styles.sessionInfo}>
+                <Text style={styles.sessionTitle} numberOfLines={1}>
+                  {item.title || "Untitled session"}
+                </Text>
+                <Text style={styles.sessionTime}>
+                  {relativeTime(item.time.updated)}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
+            </Pressable>
+          )}
         />
       )}
-      <Pressable onPress={() => void handleCreate()} style={styles.button}>
-        <Text style={styles.buttonText}>Start Session</Text>
+
+      {/* FAB */}
+      <Pressable
+        style={[styles.fab, { bottom: 20 + insets.bottom }]}
+        onPress={() => void handleCreate()}
+      >
+        <Ionicons name="add" size={28} color={palette.smoke[1]} />
       </Pressable>
-      {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
     </View>
   )
 }
@@ -93,47 +152,88 @@ export default function SessionsListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    gap: 8,
-    backgroundColor: colors.background.base,
+    backgroundColor: palette.smoke[1],
   },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginTop: 12,
-    color: colors.text.weak,
+  // --- Header ---
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.smoke[3],
+    backgroundColor: palette.smoke[1],
   },
-  error: {
-    color: colors.status.error,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
-  sessionList: {
-    gap: 8,
-  },
-  sessionItem: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.surface.highlight,
-    backgroundColor: colors.surface.base,
-  },
-  sessionItemActive: {
-    backgroundColor: palette.cobalt[2],
-    borderColor: palette.cobalt[5],
-  },
-  sessionTitle: {
+  headerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.text.base,
+    color: palette.smoke[11],
+    maxWidth: "80%",
   },
-  button: {
-    marginTop: 8,
-    paddingVertical: 12,
+  headerButton: {
+    padding: 8,
+  },
+  // --- Content ---
+  error: {
+    color: palette.smoke[11],
+    backgroundColor: palette.smoke[3],
+    padding: 12,
+    margin: 16,
     borderRadius: 8,
-    backgroundColor: colors.interactive.base,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
   },
-  buttonText: {
-    color: colors.text.invert,
-    fontWeight: "600",
+  emptyTitle: {
+    fontSize: 15,
+    color: palette.smoke[7],
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: palette.smoke[6],
+    marginTop: 4,
+  },
+  sessionList: {
+    padding: 16,
+  },
+  sessionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: palette.smoke[2],
+    marginBottom: 8,
+  },
+  sessionInfo: {
+    flex: 1,
+  },
+  sessionTitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: palette.smoke[11],
+  },
+  sessionTime: {
+    fontSize: 12,
+    color: palette.smoke[6],
+    marginTop: 2,
+  },
+  // --- FAB ---
+  fab: {
+    position: "absolute",
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: palette.smoke[10],
+    justifyContent: "center",
+    alignItems: "center",
   },
 })
