@@ -18,8 +18,10 @@ import { DebugSse } from "../utils/debugSse"
 import {
   deleteServerSecrets,
   loadCurrentServerId,
+  loadSelectedModel,
   loadServers,
   saveCurrentServerId,
+  saveSelectedModel,
   saveServers,
 } from "../storage/serverStorage"
 
@@ -400,11 +402,12 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     hydrateServers: async () => {
       const servers = await loadServers()
       const currentServerId = await loadCurrentServerId()
+      const selectedModel = await loadSelectedModel()
       const currentServer = currentServerId
         ? servers.find((server) => server.id === currentServerId)
         : undefined
 
-      set({ servers, currentServerId, currentServer })
+      set({ servers, currentServerId, currentServer, selectedModel })
 
       if (currentServer) {
         get().initializeClient(currentServer)
@@ -545,7 +548,10 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     setDiffLoading: (isDiffsLoading, diffsError) =>
       set({ isDiffsLoading, diffsError }),
     setProjects: (projects) => set({ projects }),
-    setSelectedModel: (model) => set({ selectedModel: model }),
+    setSelectedModel: (model) => {
+      set({ selectedModel: model })
+      void saveSelectedModel(model)
+    },
     setAgentWorking: (isAgentWorking) => set({ isAgentWorking }),
     setPendingPermissions: (permissions) => set({ pendingPermissions: permissions }),
     setOffline: (isOffline) => set({ isOffline }),
