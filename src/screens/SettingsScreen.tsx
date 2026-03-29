@@ -21,20 +21,6 @@ type DiscoveredServer = {
   address: string
 }
 
-let zeroconf: any = null
-try {
-  const Zeroconf = require("react-native-zeroconf").default
-  if (Zeroconf) {
-    const instance = new Zeroconf()
-    // Verify the native module is actually functional
-    if (instance && typeof instance.scan === "function") {
-      zeroconf = instance
-    }
-  }
-} catch {
-  // native module not available (Expo Go)
-}
-
 const SCAN_PORTS = [4096, 4097, 4098, 4099, 4100]
 
 async function scanSubnet(
@@ -114,40 +100,14 @@ export default function SettingsScreen() {
     scanAbortRef.current?.abort()
     setDiscovered([])
     setIsScanning(true)
-
-    if (zeroconf) {
-      // mDNS path
-      zeroconf.scan("http", "tcp", "local.")
-      setTimeout(() => {
-        zeroconf.stop()
-        setIsScanning(false)
-      }, 5000)
-    } else {
-      // Network scan fallback
-      const abort = new AbortController()
-      scanAbortRef.current = abort
-      const timeout = setTimeout(() => abort.abort(), 10000)
-      scanSubnet(addDiscovered, abort.signal).finally(() => {
-        clearTimeout(timeout)
-        setIsScanning(false)
-      })
-    }
+    const abort = new AbortController()
+    scanAbortRef.current = abort
+    const timeout = setTimeout(() => abort.abort(), 10000)
+    scanSubnet(addDiscovered, abort.signal).finally(() => {
+      clearTimeout(timeout)
+      setIsScanning(false)
+    })
   }
-
-  useEffect(() => {
-    if (!zeroconf) return
-    const onResolved = (service: any) => {
-      if (!service.name?.startsWith("opencode-")) return
-      const address = service.addresses?.[0] ?? service.host
-      if (!address) return
-      addDiscovered({ name: service.name, host: service.host, port: service.port, address })
-    }
-    zeroconf.on("resolved", onResolved)
-    return () => {
-      zeroconf.removeListener("resolved", onResolved)
-      zeroconf.stop()
-    }
-  }, [])
 
   useEffect(() => {
     return () => scanAbortRef.current?.abort()
