@@ -651,10 +651,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: colors.interactive.base,
+    backgroundColor: palette.smoke[3],
   },
   jumpToLatestText: {
-    color: colors.text.invert,
+    color: palette.smoke[10],
     fontSize: 12,
     fontWeight: "600",
   },
