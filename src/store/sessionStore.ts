@@ -242,7 +242,9 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
   const normalizeDirectory = (value?: string) => (value ? value.replace(/\/+$/, "") : value)
 
   const handleEvent = (event: Event, directory?: string) => {
-    const currentDirectory = normalizeDirectory(get().currentServer?.directory)
+    const currentDirectory = normalizeDirectory(
+      get().currentProject?.worktree ?? get().currentServer?.directory
+    )
     const eventDirectory = normalizeDirectory(directory)
     if (eventDirectory && currentDirectory && eventDirectory !== currentDirectory) {
       console.log("🧭 Dropped event (directory mismatch)", {
