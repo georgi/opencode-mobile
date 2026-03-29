@@ -465,12 +465,11 @@ export default function SessionDetailScreen() {
                   (!inputText.trim() || isSending || isAgentWorking) && styles.sendButtonDisabled,
                 ]}
                 onPress={handleSend}
-                disabled={!inputText.trim() || isSending || isAgentWorking}
               >
                 {isSending ? (
                   <ActivityIndicator size="small" color={palette.smoke[1]} />
                 ) : (
-                  <Ionicons name="arrow-up" size={16} color={palette.smoke[1]} />
+                  <Ionicons name="arrow-up" size={20} color={palette.smoke[1]} />
                 )}
               </Pressable>
             </View>
@@ -807,9 +806,9 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   sendButton: {
-    width: 30,
-    height: 26,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: palette.smoke[10],
     alignItems: "center",
     justifyContent: "center",
