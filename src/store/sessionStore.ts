@@ -251,6 +251,9 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       case "message.part.updated":
         return event.properties.part.sessionID === sessionId
 
+      case "message.part.delta":
+        return event.properties.sessionID === sessionId
+
       case "message.part.removed": {
         const message = get().messages.find((item) => item.id === event.properties.messageID)
         return message?.sessionID === sessionId
@@ -350,6 +353,25 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
             },
           }
         })
+        break
+      }
+      case "message.part.delta": {
+        const { messageID, partID, delta, field } = event.properties
+        if (delta && field === "text") {
+          set((state) => {
+            const parts = state.messageParts[messageID] ?? []
+            const index = parts.findIndex((p) => p.id === partID)
+            if (index === -1) return state
+            const part = parts[index]
+            if (part.type !== "text" && part.type !== "reasoning") return state
+            const textPart = part as TextPart
+            const next = [...parts]
+            next[index] = { ...textPart, text: `${textPart.text ?? ""}${delta}` }
+            return {
+              messageParts: { ...state.messageParts, [messageID]: next },
+            }
+          })
+        }
         break
       }
       case "message.part.removed": {
