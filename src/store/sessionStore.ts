@@ -568,7 +568,6 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         currentServer: undefined,
         currentProject: undefined,
         currentSession: undefined,
-        lastError: undefined,
         diffsError: undefined,
         eventSource: undefined,
       })
@@ -682,7 +681,6 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       set((state) => ({
         currentSession: session,
         sessions: [session, ...state.sessions.filter((item) => item.id !== session.id)],
-        lastError: undefined,
       }))
       return session
     },
@@ -720,7 +718,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
           messageParts[item.info.id] = item.parts
         }
         const hasAssistantMessage = messagesData.some(item => item.info.role === "assistant")
-        set({ messages: sortMessages(messages), messageParts, lastError: undefined, isAgentWorking: !hasAssistantMessage })
+        set({ messages: sortMessages(messages), messageParts, isAgentWorking: !hasAssistantMessage })
       }
     },
     fetchMessages: async (sessionId) => {
@@ -820,7 +818,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      set({ diffs, lastError: undefined, isDiffsLoading: false, diffsError: undefined })
+      set({ diffs, isDiffsLoading: false, diffsError: undefined })
       return diffs
     },
     summarizeSession: async (sessionId) => {
@@ -882,7 +880,6 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         pendingPermissions: state.pendingPermissions.filter(
           (permission) => permission.id !== requestId
         ),
-        lastError: undefined,
       }))
 
       return data
