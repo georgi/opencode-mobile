@@ -1,11 +1,18 @@
-import React, { useEffect } from "react"
-import { View, Text, StyleSheet } from "react-native"
+import React, { useCallback, useEffect, useState } from "react"
+import {
+    View,
+    Text,
+    StyleSheet,
+    Pressable,
+    ScrollView,
+    RefreshControl,
+} from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import { Ionicons } from "@expo/vector-icons"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import { colors, palette } from "../constants/theme"
-import { Pressable } from "react-native"
 
 export default function NotificationsScreen() {
     const navigation =
@@ -13,140 +20,186 @@ export default function NotificationsScreen() {
     const pendingPermissions = useSessionStore((state) => state.pendingPermissions)
     const fetchPermissions = useSessionStore((state) => state.fetchPermissions)
     const respondToPermission = useSessionStore((state) => state.respondToPermission)
+    const [refreshing, setRefreshing] = useState(false)
 
     useEffect(() => {
         void fetchPermissions()
     }, [fetchPermissions])
 
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true)
+        await fetchPermissions()
+        setRefreshing(false)
+    }, [fetchPermissions])
+
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Notifications</Text>
-            <Text style={{ color: colors.text.base }}>Permission prompts and session updates.</Text>
-            <Text style={styles.label}>Pending Permissions</Text>
-            <Text style={{ color: colors.text.base }}>{pendingPermissions.length} requests</Text>
-            <Pressable onPress={() => void fetchPermissions()} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Refresh</Text>
-            </Pressable>
-            {pendingPermissions.map((permission) => (
-                <View key={permission.id} style={styles.permissionCard}>
-                    <Text style={styles.permissionTitle}>{permission.permission}</Text>
-                    <Text style={{ color: colors.text.base }}>{permission.patterns.join(", ")}</Text>
-                    <View style={styles.permissionActions}>
+        <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.contentContainer}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={() => void onRefresh()}
+                    tintColor={palette.smoke[7]}
+                />
+            }
+        >
+            <View style={styles.headerRow}>
+                {pendingPermissions.length > 0 && (
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>
+                            {pendingPermissions.length}
+                        </Text>
+                    </View>
+                )}
+                <Pressable
+                    onPress={() => void fetchPermissions()}
+                    hitSlop={12}
+                >
+                    <Ionicons
+                        name="refresh"
+                        size={20}
+                        color={palette.smoke[7]}
+                    />
+                </Pressable>
+            </View>
+
+            {pendingPermissions.length === 0 ? (
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyText}>No pending permissions</Text>
+                </View>
+            ) : (
+                pendingPermissions.map((permission) => (
+                    <View key={permission.id} style={styles.permissionCard}>
+                        <Text style={styles.permissionTitle}>
+                            {permission.permission}
+                        </Text>
+                        <Text style={styles.permissionPatterns}>
+                            {permission.patterns.join(", ")}
+                        </Text>
+                        <View style={styles.permissionActions}>
+                            <Pressable
+                                style={styles.actionButton}
+                                onPress={() =>
+                                    void respondToPermission(permission.id, "once")
+                                }
+                            >
+                                <Text style={styles.actionButtonText}>Once</Text>
+                            </Pressable>
+                            <Pressable
+                                style={styles.actionButton}
+                                onPress={() =>
+                                    void respondToPermission(permission.id, "always")
+                                }
+                            >
+                                <Text style={styles.actionButtonText}>Always</Text>
+                            </Pressable>
+                            <Pressable
+                                style={styles.rejectButton}
+                                onPress={() =>
+                                    void respondToPermission(permission.id, "reject")
+                                }
+                            >
+                                <Text style={styles.rejectButtonText}>Reject</Text>
+                            </Pressable>
+                        </View>
                         <Pressable
-                            style={styles.actionButton}
-                            onPress={() => void respondToPermission(permission.id, "once")}
+                            onPress={() =>
+                                navigation.navigate("SessionDetail", {
+                                    sessionId: permission.sessionID,
+                                })
+                            }
                         >
-                            <Text style={styles.actionButtonText}>Once</Text>
-                        </Pressable>
-                        <Pressable
-                            style={styles.actionButton}
-                            onPress={() => void respondToPermission(permission.id, "always")}
-                        >
-                            <Text style={styles.actionButtonText}>Always</Text>
-                        </Pressable>
-                        <Pressable
-                            style={[styles.actionButton, styles.rejectButton]}
-                            onPress={() => void respondToPermission(permission.id, "reject")}
-                        >
-                            <Text style={[styles.actionButtonText, styles.rejectButtonText]}>Reject</Text>
+                            <Text style={styles.openSessionText}>Open Session</Text>
                         </Pressable>
                     </View>
-                    <Pressable
-                        style={styles.primaryButton}
-                        onPress={() =>
-                            navigation.navigate("SessionDetail", {
-                                sessionId: permission.sessionID,
-                            })
-                        }
-                    >
-                        <Text style={styles.primaryButtonText}>Open Session</Text>
-                    </Pressable>
-                </View>
-            ))}
-        </View>
+                ))
+            )}
+        </ScrollView>
     )
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 16,
-        gap: 8,
         backgroundColor: colors.background.base,
     },
-    title: {
-        fontSize: 20,
-        fontWeight: "600",
-        color: colors.text.base,
+    contentContainer: {
+        padding: 16,
+        gap: 8,
+        flexGrow: 1,
     },
-    label: {
+    headerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 4,
+    },
+    badge: {
+        backgroundColor: palette.smoke[3],
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        paddingVertical: 2,
+    },
+    badgeText: {
+        color: palette.smoke[11],
+        fontSize: 13,
+        fontWeight: "600",
+    },
+    emptyState: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    emptyText: {
+        color: palette.smoke[7],
         fontSize: 14,
-        fontWeight: "500",
-        marginTop: 12,
-        color: colors.text.weak,
     },
     permissionCard: {
         padding: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: colors.surface.highlight,
-        backgroundColor: colors.surface.base,
+        borderRadius: 12,
+        backgroundColor: palette.smoke[2],
         gap: 8,
-        marginTop: 8,
     },
     permissionTitle: {
         fontSize: 16,
         fontWeight: "600",
         color: colors.text.base,
     },
+    permissionPatterns: {
+        color: colors.text.weak,
+        fontSize: 13,
+    },
     permissionActions: {
         flexDirection: "row",
         gap: 8,
-        marginBottom: 8,
-    },
-    secondaryButton: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: colors.surface.highlight,
-        backgroundColor: colors.surface.base,
-        alignSelf: "flex-start",
-    },
-    secondaryButtonText: {
-        color: colors.text.base,
-        fontSize: 14,
-        fontWeight: "500",
-    },
-    primaryButton: {
-        paddingVertical: 10,
-        borderRadius: 8,
-        backgroundColor: colors.interactive.base,
-        alignItems: "center",
-    },
-    primaryButtonText: {
-        color: colors.text.invert,
-        fontWeight: "600",
     },
     actionButton: {
         flex: 1,
         paddingVertical: 8,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: colors.surface.highlight,
-        backgroundColor: colors.background.base,
+        borderRadius: 8,
+        backgroundColor: palette.smoke[3],
         alignItems: "center",
     },
     actionButtonText: {
         fontSize: 13,
         fontWeight: "500",
-        color: colors.text.base,
+        color: palette.smoke[10],
     },
     rejectButton: {
-        borderColor: palette.ember[3],
+        flex: 1,
+        paddingVertical: 8,
+        borderRadius: 8,
         backgroundColor: palette.ember[2],
+        alignItems: "center",
     },
     rejectButtonText: {
-        color: colors.status.error,
+        fontSize: 13,
+        fontWeight: "500",
+        color: palette.ember[9],
+    },
+    openSessionText: {
+        color: palette.smoke[7],
+        fontSize: 13,
     },
 })
