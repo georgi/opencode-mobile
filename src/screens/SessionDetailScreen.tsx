@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import {
   View,
   Text,
@@ -242,6 +243,7 @@ export default function SessionDetailScreen() {
   const isAgentWorking = useSessionStore((state) => state.isAgentWorking)
   const subscribeToEvents = useSessionStore((state) => state.subscribeToEvents)
   const closeEventSource = useSessionStore((state) => state.closeEventSource)
+  const insets = useSafeAreaInsets()
   const sessionId = currentSession?.id ?? route.params?.sessionId
 
   const [inputText, setInputText] = useState("")
@@ -313,7 +315,7 @@ export default function SessionDetailScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerLeft}>
           <Pressable style={styles.headerButton} onPress={() => navigation.goBack()}>
             <Ionicons name="chevron-back" size={22} color={colors.text.base} />
