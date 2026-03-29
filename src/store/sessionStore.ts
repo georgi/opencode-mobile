@@ -361,6 +361,12 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         set({ diffs: event.properties.diff, isDiffsLoading: false, diffsError: undefined })
         break
       }
+      case "session.error": {
+        const error = event.properties.error
+        const message = error?.data?.message ?? error?.name ?? "Unknown error"
+        set({ lastError: message, isAgentWorking: false })
+        break
+      }
 
       default:
         break
