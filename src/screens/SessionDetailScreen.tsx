@@ -231,6 +231,7 @@ export default function SessionDetailScreen() {
   const fetchMessages = useSessionStore((state) => state.fetchMessages)
   const fetchProviders = useSessionStore((state) => state.fetchProviders)
   const providers = useSessionStore((state) => state.providers)
+  const recentModels = useSessionStore((state) => state.recentModels)
   const selectedModel = useSessionStore((state) => state.selectedModel)
   const setSelectedModel = useSessionStore((state) => state.setSelectedModel)
   const lastError = useSessionStore((state) => state.lastError)
@@ -494,6 +495,32 @@ export default function SessionDetailScreen() {
             />
             <View style={styles.modalList}>
               <ScrollView style={{ maxHeight: 300 }} keyboardShouldPersistTaps="handled">
+                {!modelSearch && recentModels.length > 0 && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>Recent</Text>
+                    {recentModels.map((recent) => {
+                      const provider = providers.find((p) => p.id === recent.providerID)
+                      const model = provider?.models?.[recent.modelID]
+                      if (!model) return null
+                      const isSelected =
+                        selectedModel?.providerID === recent.providerID && selectedModel?.modelID === recent.modelID
+                      return (
+                        <Pressable
+                          key={`recent-${recent.providerID}/${recent.modelID}`}
+                          style={[styles.modalItem, isSelected && styles.modalItemActive]}
+                          onPress={() => {
+                            setSelectedModel({ providerID: recent.providerID, modelID: recent.modelID })
+                            setIsModelPickerOpen(false)
+                            setModelSearch("")
+                          }}
+                        >
+                          <Text style={styles.modalItemText}>{model.name ?? recent.modelID}</Text>
+                          <Text style={styles.modalItemSubtext}>{provider?.name}</Text>
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                )}
                 {providerOptions.map((provider) => {
                   const query = modelSearch.toLowerCase()
                   const filtered = query
@@ -851,6 +878,11 @@ const styles = StyleSheet.create({
     color: colors.text.base,
     fontSize: 14,
     fontWeight: "500",
+  },
+  modalItemSubtext: {
+    color: colors.text.weak,
+    fontSize: 11,
+    marginTop: 2,
   },
   modalEmpty: {
     color: colors.text.weak,

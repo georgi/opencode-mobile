@@ -5,6 +5,7 @@ import type { ServerConfig } from "../store/sessionStore"
 const SERVERS_KEY = "opencode.servers.v1"
 const CURRENT_SERVER_ID_KEY = "opencode.currentServerId.v1"
 const SELECTED_MODEL_KEY = "opencode.selectedModel.v1"
+const RECENT_MODELS_KEY = "opencode.recentModels.v1"
 const BASIC_AUTH_KEY_PREFIX = "opencode.server.basicAuth.v1."
 
 type StoredServer = Omit<ServerConfig, "basicAuth"> & {
@@ -98,4 +99,21 @@ export async function saveSelectedModel(model?: { providerID: string; modelID: s
     return
   }
   await AsyncStorage.setItem(SELECTED_MODEL_KEY, JSON.stringify(model))
+}
+
+type ModelRef = { providerID: string; modelID: string }
+
+export async function loadRecentModels(): Promise<ModelRef[]> {
+  const raw = await AsyncStorage.getItem(RECENT_MODELS_KEY)
+  if (!raw) return []
+  return JSON.parse(raw)
+}
+
+export async function saveRecentModel(model: ModelRef): Promise<void> {
+  const recent = await loadRecentModels()
+  const filtered = recent.filter(
+    (m) => !(m.providerID === model.providerID && m.modelID === model.modelID)
+  )
+  const updated = [model, ...filtered].slice(0, 5)
+  await AsyncStorage.setItem(RECENT_MODELS_KEY, JSON.stringify(updated))
 }

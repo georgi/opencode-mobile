@@ -18,9 +18,11 @@ import { DebugSse } from "../utils/debugSse"
 import {
   deleteServerSecrets,
   loadCurrentServerId,
+  loadRecentModels,
   loadSelectedModel,
   loadServers,
   saveCurrentServerId,
+  saveRecentModel,
   saveSelectedModel,
   saveServers,
 } from "../storage/serverStorage"
@@ -50,6 +52,7 @@ export type SessionState = {
   diffsError?: string
   providers: ProviderListResponse["all"]
   selectedModel?: { providerID: string; modelID: string }
+  recentModels: { providerID: string; modelID: string }[]
   projects: Project[]
   pendingPermissions: PermissionRequest[]
   isOffline: boolean
@@ -73,6 +76,7 @@ export const initialSessionState: SessionState = {
   diffs: [],
   isDiffsLoading: false,
   providers: [],
+  recentModels: [],
   projects: [],
   pendingPermissions: [],
   isOffline: false,
@@ -403,11 +407,12 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       const servers = await loadServers()
       const currentServerId = await loadCurrentServerId()
       const selectedModel = await loadSelectedModel()
+      const recentModels = await loadRecentModels()
       const currentServer = currentServerId
         ? servers.find((server) => server.id === currentServerId)
         : undefined
 
-      set({ servers, currentServerId, currentServer, selectedModel })
+      set({ servers, currentServerId, currentServer, selectedModel, recentModels })
 
       if (currentServer) {
         get().initializeClient(currentServer)
@@ -551,6 +556,11 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     setSelectedModel: (model) => {
       set({ selectedModel: model })
       void saveSelectedModel(model)
+      if (model) {
+        void saveRecentModel(model).then(() =>
+          loadRecentModels().then((recentModels) => set({ recentModels }))
+        )
+      }
     },
     setAgentWorking: (isAgentWorking) => set({ isAgentWorking }),
     setPendingPermissions: (permissions) => set({ pendingPermissions: permissions }),
