@@ -1,6 +1,7 @@
-import React, { useEffect } from "react"
-import { View, Text, StyleSheet, Pressable } from "react-native"
+import React, { useCallback, useEffect, useState } from "react"
+import { View, Text, StyleSheet, Pressable, RefreshControl } from "react-native"
 import { FlashList } from "@shopify/flash-list"
+import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
@@ -9,7 +10,7 @@ import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Project } from "@opencode-ai/sdk/v2/client"
 import type { AppTabParamList } from "../navigation/AppTabs"
-import { colors, palette } from "../constants/theme"
+import { palette } from "../constants/theme"
 
 type ProjectsHomeNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<ProjectsStackParamList>,
@@ -24,6 +25,7 @@ export default function ProjectsHomeScreen() {
   const fetchProjects = useSessionStore((state) => state.fetchProjects)
   const selectProject = useSessionStore((state) => state.selectProject)
   const lastError = useSessionStore((state) => state.lastError)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (!currentServer) {
@@ -33,33 +35,53 @@ export default function ProjectsHomeScreen() {
     void fetchProjects()
   }, [currentServer, fetchProjects])
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await fetchProjects()
+    setRefreshing(false)
+  }, [fetchProjects])
+
   return (
     <View style={styles.container}>
       {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
       {projects.length === 0 ? (
-        <Text>No projects loaded</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>No projects</Text>
+        </View>
       ) : (
         <FlashList
           data={projects}
           keyExtractor={(project: Project) => project.id}
+          estimatedItemSize={60}
           contentContainerStyle={styles.projectList as never}
-          // estimatedItemSize={84}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              tintColor={palette.smoke[7]}
+            />
+          }
           renderItem={({ item }: { item: Project }) => {
             const isSelected = item.id === currentProject?.id
             return (
               <Pressable
                 onPress={() => {
                   selectProject(item)
-                  setTimeout(() => {
-                    navigation.navigate("SessionsList")
-                  }, 50)
+                  navigation.navigate("SessionsList")
                 }}
                 style={[styles.projectItem, isSelected && styles.projectItemActive]}
               >
-                <Text style={styles.projectName}>{item.name ?? item.worktree.split("/").pop()}</Text>
-                {item.name ? (
-                  <Text style={styles.projectPath}>{item.worktree}</Text>
-                ) : null}
+                <View style={styles.projectInfo}>
+                  <Text style={styles.projectName}>
+                    {item.name ?? item.worktree.split("/").pop()}
+                  </Text>
+                  {item.worktree ? (
+                    <Text style={styles.projectPath} numberOfLines={1}>
+                      {item.worktree}
+                    </Text>
+                  ) : null}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
               </Pressable>
             )
           }}
@@ -72,75 +94,50 @@ export default function ProjectsHomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    gap: 8,
-    backgroundColor: colors.background.base,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    color: colors.text.base,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginTop: 12,
-    color: colors.text.weak,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.input.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: colors.text.base,
-    backgroundColor: colors.input.bg,
-  },
-  serverSelector: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.input.border,
-    backgroundColor: colors.input.bg,
-  },
-  serverSelectorLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.text.base,
-  },
-  serverSelectorChevron: {
-    fontSize: 18,
-    color: colors.text.weaker,
+    backgroundColor: palette.smoke[1],
   },
   error: {
-    color: colors.status.error,
+    color: palette.smoke[11],
+    backgroundColor: palette.smoke[3],
+    padding: 12,
+    margin: 16,
+    borderRadius: 8,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 15,
+    color: palette.smoke[7],
   },
   projectList: {
-    gap: 8,
-    paddingBottom: 12,
+    padding: 16,
   },
   projectItem: {
+    flexDirection: "row",
+    alignItems: "center",
     padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.surface.highlight,
-    backgroundColor: colors.surface.base,
+    borderRadius: 12,
+    backgroundColor: palette.smoke[2],
+    marginBottom: 8,
   },
   projectItemActive: {
-    backgroundColor: palette.cobalt[2],
-    borderColor: palette.cobalt[5],
+    backgroundColor: palette.smoke[3],
+  },
+  projectInfo: {
+    flex: 1,
   },
   projectName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.text.base,
+    fontSize: 15,
+    fontWeight: "700",
+    color: palette.smoke[11],
   },
   projectPath: {
     fontSize: 12,
-    color: colors.text.weak,
+    color: palette.smoke[7],
+    fontFamily: "monospace",
+    marginTop: 2,
   },
 })
