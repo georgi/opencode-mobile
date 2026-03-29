@@ -260,37 +260,19 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     )
     const eventDirectory = normalizeDirectory(directory)
     if (eventDirectory && currentDirectory && eventDirectory !== currentDirectory) {
-      console.log("🧭 Dropped event (directory mismatch)", {
-        eventDirectory,
-        currentDirectory,
-        type: event.type,
-      })
       return
     }
 
     const sessionId = get().eventSessionId ?? get().currentSession?.id
     if (!isForSession(event, sessionId)) {
-      console.log("🧭 Dropped event (session mismatch)", {
-        sessionId,
-        type: event.type,
-      })
       return
     }
-
-    // Log to console AND update state
-    console.log("🔔 EVENT RECEIVED:", event.type, JSON.stringify(event.properties, null, 2))
 
     // Update debug counters in state
     set((state) => ({
       eventCount: state.eventCount + 1,
       lastEventType: event.type,
     }))
-
-    // Also log to Alert for visibility
-    if (event.type !== "server.connected" && event.type !== "session.status") {
-      // Only alert for non-heartbeat events
-      console.log("📊 Event counter:", get().eventCount + 1)
-    }
 
     switch (event.type) {
       case "session.updated":
@@ -942,27 +924,22 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       return session
     },
     subscribeToEvents: async (sessionId) => {
-      console.log("🚀 Starting event subscription with EventSource...")
-
       const client = ensureClient()
       if (!client) {
-        console.error("❌ Event subscription failed: No client")
+        console.error("Event subscription failed: No client")
         return
       }
 
       // Use the server directory (matches Instance.directory on the server)
       const directory = get().currentServer?.directory
       if (!directory) {
-        console.error("❌ Event subscription failed: No directory")
+        console.error("Event subscription failed: No directory")
         return
       }
-
-      console.log("📡 Subscribing to events for directory:", directory)
 
       // Close existing EventSource if any
       const existingSource = get().eventSource
       if (existingSource) {
-        console.log("🔌 Closing existing EventSource connection")
         existingSource.close()
       }
 
@@ -970,13 +947,13 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       try {
         const baseUrl = get().currentServer?.baseUrl
         if (!baseUrl) {
-          console.error("❌ Failed to build EventSource URL: missing baseUrl")
+          console.error("Failed to build EventSource URL: missing baseUrl")
           return
         }
         serverUrl = new URL(baseUrl)
         serverUrl.pathname = serverUrl.pathname.replace(/\/+$/, "") + "/global/event"
       } catch (error) {
-        console.error("❌ Failed to build EventSource URL", error)
+        console.error("Failed to build EventSource URL", error)
         return
       }
 
@@ -985,9 +962,6 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       if (basicAuth) {
         headers.Authorization = `Basic ${basicAuth}`
       }
-
-      console.log("📡 EventSource URL:", serverUrl.toString())
-      console.log("📡 EventSource headers:", headers)
 
       // Create new EventSource connection
       let es: DebugSse
@@ -998,46 +972,35 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
           headers,
         })
       } catch (error) {
-        console.error("❌ Failed to create DebugSse", error)
+        console.error("Failed to create DebugSse", error)
         return
       }
 
       // Store reference to EventSource + session filter
       set({ eventSource: es, eventSessionId: sessionId })
 
-      es.addEventListener("open", (event) => {
-        console.log("✅ EventSource connected!", event)
-      })
-
       es.addEventListener("message", (event) => {
         try {
-          console.log("📥 EventSource raw:", event.data)
           const data = JSON.parse(event.data)
           const payload = "payload" in data ? data.payload : data
           const eventDirectory = "directory" in data ? data.directory : undefined
-          console.log("📨 EventSource message:", payload.type, payload.properties)
           handleEvent(payload as Event, eventDirectory)
         } catch (error) {
-          console.error("❌ Failed to parse event:", error, event.data)
+          console.error("Failed to parse event:", error, event.data)
         }
       })
 
       es.addEventListener("error", (event) => {
-        console.error("❌ EventSource error:", event)
+        console.error("EventSource error:", event)
         if (event.type === "exception") {
           console.error("Exception:", event.error)
         }
-      })
-
-      es.addEventListener("close", (event) => {
-        console.log("🔌 EventSource closed", event)
       })
     },
 
     closeEventSource: () => {
       const es = get().eventSource
       if (es) {
-        console.log("🔌 Manually closing EventSource connection")
         es.close()
         set({ eventSource: undefined, eventSessionId: undefined })
       }

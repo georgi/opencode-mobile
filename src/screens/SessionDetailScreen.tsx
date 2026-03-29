@@ -270,7 +270,6 @@ export default function SessionDetailScreen() {
   // Cleanup EventSource on unmount
   useEffect(() => {
     return () => {
-      console.log("SessionDetailScreen unmounting, closing EventSource")
       closeEventSource()
     }
   }, [])
