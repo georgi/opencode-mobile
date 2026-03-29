@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import {
   View,
   Text,
@@ -7,9 +7,21 @@ import {
   Pressable,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from "react-native"
+import { Ionicons } from "@expo/vector-icons"
+import Zeroconf from "react-native-zeroconf"
 import { useSessionStore, type ServerConfig } from "../store/sessionStore"
 import { colors, palette } from "../constants/theme"
+
+type DiscoveredServer = {
+  name: string
+  host: string
+  port: number
+  address: string
+}
+
+const zeroconf = new Zeroconf()
 
 const defaultBaseUrl = "https://api.opencode.ai"
 
@@ -34,11 +46,40 @@ export default function SettingsScreen() {
   )
 
   const [editingServerId, setEditingServerId] = useState<string | undefined>(undefined)
+  const [isScanning, setIsScanning] = useState(false)
+  const [discovered, setDiscovered] = useState<DiscoveredServer[]>([])
 
   const [label, setLabel] = useState("")
   const [baseUrl, setBaseUrl] = useState(defaultBaseUrl)
   const [directory, setDirectory] = useState("")
   const [basicAuth, setBasicAuth] = useState("")
+
+  const startScan = () => {
+    setDiscovered([])
+    setIsScanning(true)
+    zeroconf.scan("http", "tcp", "local.")
+    setTimeout(() => {
+      zeroconf.stop()
+      setIsScanning(false)
+    }, 5000)
+  }
+
+  useEffect(() => {
+    const onResolved = (service: any) => {
+      if (!service.name?.startsWith("opencode-")) return
+      const address = service.addresses?.[0] ?? service.host
+      if (!address) return
+      setDiscovered((prev) => {
+        if (prev.some((s) => s.address === address && s.port === service.port)) return prev
+        return [...prev, { name: service.name, host: service.host, port: service.port, address }]
+      })
+    }
+    zeroconf.on("resolved", onResolved)
+    return () => {
+      zeroconf.removeListener("resolved", onResolved)
+      zeroconf.stop()
+    }
+  }, [])
 
   const canSave = label.trim().length > 0 && baseUrl.trim().length > 0 && directory.trim().length > 0
 
@@ -132,6 +173,44 @@ export default function SettingsScreen() {
             )
           })}
         </View>
+      )}
+
+      <View style={styles.scanHeader}>
+        <Text style={styles.label}>Discover on LAN</Text>
+        <Pressable onPress={startScan} disabled={isScanning} style={styles.scanButton}>
+          {isScanning ? (
+            <ActivityIndicator size="small" color={palette.smoke[7]} />
+          ) : (
+            <Ionicons name="search" size={16} color={palette.smoke[7]} />
+          )}
+          <Text style={styles.scanButtonText}>{isScanning ? "Scanning..." : "Scan"}</Text>
+        </Pressable>
+      </View>
+      {discovered.length > 0 && (
+        <View style={styles.discoveredList}>
+          {discovered.map((server) => (
+            <Pressable
+              key={`${server.address}:${server.port}`}
+              style={styles.discoveredCard}
+              onPress={() => {
+                setLabel(server.name.replace("opencode-", "opencode "))
+                setBaseUrl(`http://${server.address}:${server.port}`)
+                setDirectory("")
+                setBasicAuth("")
+                setEditingServerId(undefined)
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.discoveredName}>{server.name}</Text>
+                <Text style={styles.discoveredAddress}>{server.address}:{server.port}</Text>
+              </View>
+              <Ionicons name="add-circle-outline" size={20} color={palette.smoke[7]} />
+            </Pressable>
+          ))}
+        </View>
+      )}
+      {isScanning && discovered.length === 0 && (
+        <Text style={styles.scanHint}>Looking for OpenCode servers...</Text>
       )}
 
       <Text style={styles.label}>{editingServerId ? "Update Server" : "Add Server"}</Text>
@@ -295,5 +374,53 @@ const styles = StyleSheet.create({
   cancelText: {
     color: palette.smoke[7],
     fontWeight: "600",
+  },
+  scanHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
+  scanButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: palette.smoke[2],
+  },
+  scanButtonText: {
+    fontSize: 13,
+    color: palette.smoke[7],
+    fontWeight: "500",
+  },
+  discoveredList: {
+    gap: 6,
+  },
+  discoveredCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: palette.smoke[2],
+    gap: 8,
+  },
+  discoveredName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: palette.smoke[10],
+  },
+  discoveredAddress: {
+    fontSize: 12,
+    fontFamily: "Menlo",
+    color: palette.smoke[7],
+    marginTop: 2,
+  },
+  scanHint: {
+    fontSize: 13,
+    color: palette.smoke[6],
+    textAlign: "center",
+    paddingVertical: 12,
   },
 })

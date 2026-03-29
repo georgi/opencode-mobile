@@ -1,0 +1,132 @@
+<h2>Chat Experience: Current Issues & Direction</h2>
+<p class="subtitle">Let's pick a design direction for the chat overhaul</p>
+
+<div class="section">
+  <h3>Current Problems</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+    <div style="background: #191514; border: 1px solid #393433; border-radius: 8px; padding: 12px;">
+      <div style="font-size: 11px; color: #fc533a; font-weight: 600; margin-bottom: 6px;">VISUAL</div>
+      <ul style="font-size: 13px; color: #c8c3c1; margin: 0; padding-left: 16px;">
+        <li>Send button is gray (#6d6867) — no personality</li>
+        <li>No distinction between user/assistant messages</li>
+        <li>3 stacked bars at bottom (session + model + input)</li>
+        <li>Code blocks at 10px — too small for mobile</li>
+        <li>Markdown body at 12px — needs to be larger</li>
+      </ul>
+    </div>
+    <div style="background: #191514; border: 1px solid #393433; border-radius: 8px; padding: 12px;">
+      <div style="font-size: 11px; color: #fc533a; font-weight: 600; margin-bottom: 6px;">UX</div>
+      <ul style="font-size: 13px; color: #c8c3c1; margin: 0; padding-left: 16px;">
+        <li>"Thinking" indicator above the message list</li>
+        <li>Tool calls just show "tool_name..." as text</li>
+        <li>Model picker is a full bar, always visible</li>
+        <li>No streaming animation/progress</li>
+        <li>Messages reversed with .reverse() — scroll bugs</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<h3>Pick a design direction</h3>
+<p class="subtitle">These set the overall tone — we'll refine details after</p>
+
+<div class="cards">
+  <div class="card" data-choice="terminal" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #0a0706; padding: 16px; min-height: 200px;">
+      <!-- Terminal-inspired mockup -->
+      <div style="font-family: monospace; font-size: 11px;">
+        <div style="color: #6d6867; margin-bottom: 12px;">── session: refactor auth ──</div>
+        <div style="margin-bottom: 16px;">
+          <div style="color: #59a2ff; font-size: 10px; margin-bottom: 4px;">YOU</div>
+          <div style="color: #c8c3c1; padding: 8px; background: #100c0c; border-left: 2px solid #59a2ff; font-size: 12px;">fix the login validation bug</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <div style="color: #8ebc8a; font-size: 10px; margin-bottom: 4px;">ASSISTANT</div>
+          <div style="color: #c8c3c1; padding: 8px; background: #100c0c; border-left: 2px solid #8ebc8a; font-size: 12px;">I'll fix the validation. Let me check the auth module...</div>
+          <div style="margin-top: 6px; padding: 6px 8px; background: #191514; border-radius: 4px; display: inline-flex; align-items: center; gap: 6px;">
+            <span style="color: #cdab19; font-size: 10px;">⚡</span>
+            <span style="color: #7e7978; font-size: 10px;">read_file → auth.ts</span>
+          </div>
+        </div>
+        <div style="border-top: 1px solid #222; padding-top: 8px; display: flex; align-items: center; gap: 8px;">
+          <div style="flex: 1; background: #191514; border: 1px solid #2c2827; border-radius: 4px; padding: 6px 8px; color: #4b4646; font-size: 11px;">Type a message...</div>
+          <div style="background: #59a2ff; color: #0a0706; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: bold;">⏎</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Terminal Native</h3>
+      <p>Developer-focused. Monospace type, left-border accents, compact tool call badges. Feels like a premium CLI in your pocket. Cobalt accent for user, mint for assistant.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="modern" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #0a0706; padding: 16px; min-height: 200px;">
+      <!-- Modern chat mockup -->
+      <div style="font-family: -apple-system, sans-serif; font-size: 12px;">
+        <div style="margin-bottom: 16px; display: flex; justify-content: flex-end;">
+          <div style="max-width: 75%; background: #0b2a76; padding: 10px 14px; border-radius: 16px 16px 4px 16px; color: #afe6ff; font-size: 13px;">fix the login validation bug</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <div style="max-width: 85%; background: #100c0c; border: 1px solid #221e1d; padding: 10px 14px; border-radius: 4px 16px 16px 16px;">
+            <div style="color: #c8c3c1; font-size: 13px; margin-bottom: 8px;">I'll fix the validation. Let me check the auth module...</div>
+            <div style="padding: 8px; background: #0a0706; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+              <div style="width: 6px; height: 6px; background: #cdab19; border-radius: 50%;"></div>
+              <span style="color: #7e7978; font-size: 11px; font-family: monospace;">read_file</span>
+              <span style="color: #4b4646; font-size: 11px;">→ auth.ts</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid #191514;">
+          <div style="flex: 1; background: #100c0c; border: 1px solid #2c2827; border-radius: 20px; padding: 8px 14px; color: #4b4646; font-size: 12px;">Type a message...</div>
+          <div style="width: 36px; height: 36px; background: #034cff; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <span style="color: white; font-size: 14px;">↑</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Modern Chat</h3>
+      <p>Familiar chat UX. Bubbles, rounded corners, cobalt accent. User messages right-aligned, assistant left. Tool calls as inline cards. Feels like iMessage for code.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: #0a0706; padding: 16px; min-height: 200px;">
+      <!-- Hybrid mockup -->
+      <div style="font-family: -apple-system, sans-serif; font-size: 12px;">
+        <div style="margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <div style="width: 20px; height: 20px; background: #0b2a76; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #59a2ff; font-weight: bold;">Y</div>
+            <span style="color: #59a2ff; font-size: 11px; font-weight: 600;">You</span>
+            <span style="color: #4b4646; font-size: 10px;">2:34 PM</span>
+          </div>
+          <div style="color: #c8c3c1; font-size: 13px; padding-left: 26px;">fix the login validation bug</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <div style="width: 20px; height: 20px; background: #192918; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #8ebc8a; font-weight: bold;">A</div>
+            <span style="color: #8ebc8a; font-size: 11px; font-weight: 600;">Assistant</span>
+            <span style="color: #4b4646; font-size: 10px;">2:34 PM</span>
+          </div>
+          <div style="padding-left: 26px;">
+            <div style="color: #c8c3c1; font-size: 13px; margin-bottom: 8px;">I'll fix the validation. Let me check the auth module...</div>
+            <div style="padding: 6px 10px; background: #191514; border: 1px solid #2c2827; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;">
+              <span style="color: #cdab19; font-size: 10px;">●</span>
+              <span style="color: #969190; font-size: 11px; font-family: monospace;">read_file</span>
+              <span style="color: #4b4646; font-size: 11px; font-family: monospace;">auth.ts</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid #191514;">
+          <div style="flex: 1; background: #100c0c; border: 1px solid #2c2827; border-radius: 12px; padding: 8px 14px; color: #4b4646; font-size: 12px;">Type a message...</div>
+          <div style="background: #034cff; color: white; padding: 6px 14px; border-radius: 10px; font-size: 12px; font-weight: 600;">Send</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Slack/Discord Hybrid</h3>
+      <p>Full-width messages with avatar badges and colored usernames. No bubbles — cleaner for long assistant responses with code. Tool calls as compact inline chips. Best readability for markdown-heavy content.</p>
+    </div>
+  </div>
+</div>
