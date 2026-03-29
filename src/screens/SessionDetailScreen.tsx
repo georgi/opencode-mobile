@@ -235,6 +235,7 @@ export default function SessionDetailScreen() {
   const selectedModel = useSessionStore((state) => state.selectedModel)
   const setSelectedModel = useSessionStore((state) => state.setSelectedModel)
   const lastError = useSessionStore((state) => state.lastError)
+  const clearError = useSessionStore((state) => state.clearError)
   const abortSession = useSessionStore((state) => state.abortSession)
   const revertSession = useSessionStore((state) => state.revertSession)
   const unrevertSession = useSessionStore((state) => state.unrevertSession)
@@ -273,6 +274,13 @@ export default function SessionDetailScreen() {
       closeEventSource()
     }
   }, [])
+
+  // Auto-dismiss error banner after 5 seconds
+  useEffect(() => {
+    if (!lastError) return
+    const timer = setTimeout(() => clearError(), 5000)
+    return () => clearTimeout(timer)
+  }, [lastError])
 
   const handleSend = () => {
     if (!inputText.trim() || !sessionId || isSending || isAgentWorking) {
