@@ -274,20 +274,14 @@ export default function SessionDetailScreen() {
     }
   }, [])
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!inputText.trim() || !sessionId || isSending || isAgentWorking) {
       return
     }
 
     const text = inputText.trim()
     setInputText("")
-    setIsSending(true)
-
-    try {
-      await sendPrompt(sessionId, text)
-    } finally {
-      setIsSending(false)
-    }
+    void sendPrompt(sessionId, text)
   }
 
   const listData = React.useMemo(() => {
