@@ -8,7 +8,7 @@ module.exports = {
     "^@shopify/flash-list$": "<rootDir>/tests/__mocks__/flash-list.tsx",
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(@react-native|react-native|@react-navigation|@shopify|expo-.*|unorm|uuid|expo)/)",
+    "node_modules/(?!(@react-native|react-native|react-native-url-polyfill|@react-navigation|@shopify|expo-.*|unorm|uuid|expo)/)",
   ],
   transform: {
     "^.+\\.(js|jsx|ts|tsx)$": "babel-jest",

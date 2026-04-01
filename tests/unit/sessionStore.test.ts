@@ -125,6 +125,7 @@ describe("sessionStore", () => {
 
     const session = await useSessionStore.getState().createSession({
       title: "Test Session",
+      directory: "/repo",
     })
     expect(session?.id).toBe("session-1")
 
@@ -138,7 +139,7 @@ describe("sessionStore", () => {
     })
   })
 
-  it("keeps messages sorted newest-first", () => {
+  it("keeps messages sorted oldest-first", () => {
     const createAssistantMessage = (id: string, created: number): Message => ({
       id,
       sessionID: "session-1",
@@ -170,29 +171,31 @@ describe("sessionStore", () => {
 
     useSessionStore.getState().setMessages([olderMessage, newerMessage])
     expect(useSessionStore.getState().messages.map((item) => item.id)).toEqual([
-      "msg-newer",
       "msg-older",
+      "msg-newer",
     ])
 
     const latestMessage = createAssistantMessage("msg-latest", 3000)
 
     useSessionStore.getState().appendMessage(latestMessage)
     expect(useSessionStore.getState().messages.map((item) => item.id)).toEqual([
-      "msg-latest",
-      "msg-newer",
       "msg-older",
+      "msg-newer",
+      "msg-latest",
     ])
 
+    // upsertMessage does in-place update (no re-sort) for existing messages
     const updatedOlderMessage = {
       ...olderMessage,
       time: { created: 4000 },
     }
 
     useSessionStore.getState().appendMessage(updatedOlderMessage)
+    // In-place update: msg-older stays at index 0 despite new timestamp
     expect(useSessionStore.getState().messages.map((item) => item.id)).toEqual([
       "msg-older",
-      "msg-latest",
       "msg-newer",
+      "msg-latest",
     ])
   })
 })

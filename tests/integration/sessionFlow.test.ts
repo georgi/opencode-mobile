@@ -125,11 +125,12 @@ describe("session flow", () => {
       },
     })
 
-    const session = await useSessionStore.getState().createSession()
+    const session = await useSessionStore.getState().createSession({ directory: "/repo" })
     expect(session?.id).toBe("session-42")
 
     await useSessionStore.getState().sendPrompt("session-42", "Hello")
-    expect(useSessionStore.getState().messages.length).toBe(1)
+    // sendPrompt no longer adds messages directly — SSE handles message updates
+    expect(client.session.prompt).toHaveBeenCalled()
 
     const diffs = await useSessionStore.getState().fetchDiffs("session-42")
     expect(diffs?.[0]?.file).toBe("src/app.ts")

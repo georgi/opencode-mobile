@@ -13,6 +13,8 @@ export const createOpencodeClient = () => ({
     summarize: async () => ({ data: undefined, error: undefined }),
     share: async () => ({ data: undefined, error: undefined }),
     unshare: async () => ({ data: undefined, error: undefined }),
+    delete: async () => ({ data: undefined, error: undefined }),
+    messages: async () => ({ data: [], error: undefined }),
   },
   permission: {
     list: async () => ({ data: undefined, error: undefined }),
