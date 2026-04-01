@@ -611,6 +611,7 @@ export default function SessionDetailScreen() {
               keyExtractor={(item) => item.id}
               overScrollMode="never"
               keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
               renderItem={({ item }) => {
                 const row =
                   item.id === "__thinking__" ? (

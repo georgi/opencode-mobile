@@ -174,7 +174,6 @@ export default function ReviewScreen() {
                         <FlashList
                             data={diffs}
                             keyExtractor={(item: FileDiff) => item.file}
-                            estimatedItemSize={56}
                             extraData={expandedFiles}
                             renderItem={({ item }: { item: FileDiff }) => (
                                 <FileAccordionItem

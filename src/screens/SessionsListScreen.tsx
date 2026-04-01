@@ -111,7 +111,8 @@ export default function SessionsListScreen() {
             void deleteSession(session.id)
           },
         },
-      ]
+      ],
+      { cancelable: true, onDismiss: () => swipeableRef?.close() }
     )
   }
 
