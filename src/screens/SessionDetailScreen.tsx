@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
-  RefreshControl,
 } from "react-native"
 import { FlashList, type FlashListRef } from "@shopify/flash-list"
 import { useNavigation, useRoute } from "@react-navigation/native"
@@ -19,12 +18,14 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import type { RouteProp } from "@react-navigation/native"
 import { Ionicons } from "@expo/vector-icons"
 import Markdown from "react-native-markdown-display"
+import { useShallow } from "zustand/react/shallow"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Message, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2/client"
 import { colors, palette } from "../constants/theme"
 import { ErrorBanner } from "../components/ErrorBanner"
 import * as Clipboard from "expo-clipboard"
+import * as Haptics from "expo-haptics"
 
 const emptyParts: Part[] = []
 
@@ -258,6 +259,8 @@ const MessageRow = React.memo(function MessageRow({
   const isUser = message.role === "user"
   const segments = useMemo(() => groupParts(parts), [parts])
 
+  const timestamp = message.time?.created ? formatTimestamp(message.time.created) : null
+
   if (isUser) {
     const text = segments.map((s) => (s.type === "text" ? s.text : "")).join("\n").trim()
     return (
@@ -265,6 +268,7 @@ const MessageRow = React.memo(function MessageRow({
         <View style={styles.userBubble}>
           <Text style={styles.userBubbleText}>{text}</Text>
         </View>
+        {timestamp && <Text style={styles.timestampRight}>{timestamp}</Text>}
       </View>
     )
   }
@@ -281,6 +285,7 @@ const MessageRow = React.memo(function MessageRow({
         }
         return <ToolCallGroup key={i} tools={seg.tools} />
       })}
+      {timestamp && <Text style={styles.timestampLeft}>{timestamp}</Text>}
     </View>
   )
 })
@@ -411,31 +416,52 @@ function ModelPicker({
 
 // --- Main Screen ---
 
+// Stable action references — zustand actions are referentially stable, so
+// grouping them into a single selector avoids 9 separate subscriptions without
+// causing extra re-renders.
+const useActions = () =>
+  useSessionStore(
+    useShallow((state) => ({
+      sendPrompt: state.sendPrompt,
+      fetchMessages: state.fetchMessages,
+      abortSession: state.abortSession,
+      revertSession: state.revertSession,
+      unrevertSession: state.unrevertSession,
+      subscribeToEvents: state.subscribeToEvents,
+      closeEventSource: state.closeEventSource,
+    }))
+  )
+
 export default function SessionDetailScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<ProjectsStackParamList>>()
   const route = useRoute<RouteProp<ProjectsStackParamList, "SessionDetail">>()
+
+  // Actions (stable references, single subscription)
+  const {
+    sendPrompt,
+    fetchMessages,
+    abortSession,
+    revertSession,
+    unrevertSession,
+    subscribeToEvents,
+    closeEventSource,
+  } = useActions()
+
+  // Reactive state (individual selectors — each triggers re-render only when its value changes)
   const currentSession = useSessionStore((state) => state.currentSession)
   const currentProject = useSessionStore((state) => state.currentProject)
   const currentServer = useSessionStore((state) => state.currentServer)
   const messages = useSessionStore((state) => state.messages)
-  const sendPrompt = useSessionStore((state) => state.sendPrompt)
-  const fetchMessages = useSessionStore((state) => state.fetchMessages)
   const providers = useSessionStore((state) => state.providers)
   const selectedModel = useSessionStore((state) => state.selectedModel)
-  const abortSession = useSessionStore((state) => state.abortSession)
-  const revertSession = useSessionStore((state) => state.revertSession)
-  const unrevertSession = useSessionStore((state) => state.unrevertSession)
   const isAgentWorking = useSessionStore((state) => state.isAgentWorking)
-  const subscribeToEvents = useSessionStore((state) => state.subscribeToEvents)
-  const closeEventSource = useSessionStore((state) => state.closeEventSource)
   const insets = useSafeAreaInsets()
   const sessionId = currentSession?.id ?? route.params?.sessionId
 
   const [inputText, setInputText] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false)
   const flatListRef = useRef<FlashListRef<Message>>(null)
 
@@ -468,14 +494,19 @@ export default function SessionDetailScreen() {
 
     const text = inputText.trim()
     setInputText("")
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     void sendPrompt(sessionId, text)
   }
 
+  // Newest-first order: the list is visually inverted (scaleY: -1) so index 0
+  // renders at the bottom of the viewport. This keeps the latest messages
+  // pinned to the bottom without needing FlashList's `inverted` prop.
   const listData = React.useMemo(() => {
+    const reversed = [...messages].reverse()
     if (isAgentWorking) {
-      return [{ id: "__thinking__", role: "assistant" } as Message, ...messages]
+      return [{ id: "__thinking__", role: "assistant" } as Message, ...reversed]
     }
-    return messages
+    return reversed
   }, [messages, isAgentWorking])
 
   const modelDisplayName = useMemo(() => {
@@ -512,13 +543,14 @@ export default function SessionDetailScreen() {
           {sessionId ? (
             <Pressable
               style={[styles.headerButton, !currentSession?.revert?.messageID && styles.headerButtonDisabled]}
-              onPress={() =>
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
                 void revertSession(
                   sessionId,
                   currentSession?.revert?.messageID,
                   currentSession?.revert?.partID
                 )
-              }
+              }}
               disabled={!currentSession?.revert?.messageID}
             >
               <Ionicons name="arrow-undo" size={18} color={currentSession?.revert?.messageID ? colors.interactive.base : palette.smoke[4]} />
@@ -526,10 +558,14 @@ export default function SessionDetailScreen() {
           ) : null}
           {sessionId ? (
             <Pressable
-              style={styles.headerButton}
-              onPress={() => void unrevertSession(sessionId)}
+              style={[styles.headerButton, !currentSession?.revert?.messageID && styles.headerButtonDisabled]}
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+                void unrevertSession(sessionId)
+              }}
+              disabled={!currentSession?.revert?.messageID}
             >
-              <Ionicons name="arrow-redo" size={18} color={colors.interactive.base} />
+              <Ionicons name="arrow-redo" size={18} color={currentSession?.revert?.messageID ? colors.interactive.base : palette.smoke[4]} />
             </Pressable>
           ) : null}
           {sessionId ? (
@@ -575,26 +611,22 @@ export default function SessionDetailScreen() {
               keyExtractor={(item) => item.id}
               overScrollMode="never"
               keyboardDismissMode="on-drag"
-              refreshControl={
-                <RefreshControl
-                  refreshing={isRefreshing}
-                  onRefresh={() => {
-                    if (!sessionId) return
-                    setIsRefreshing(true)
-                    void fetchMessages(sessionId).finally(() => setIsRefreshing(false))
-                  }}
-                  tintColor={palette.smoke[7]}
-                />
-              }
               renderItem={({ item }) => {
-                if (item.id === "__thinking__") {
-                  return <ThinkingIndicator />
-                }
-                return <MessageRow message={item} />
+                const row =
+                  item.id === "__thinking__" ? (
+                    <ThinkingIndicator />
+                  ) : (
+                    <MessageRow message={item} />
+                  )
+                // Flip each row back upright (the list itself is flipped)
+                return <View style={styles.invertedRow}>{row}</View>
               }}
               contentContainerStyle={styles.messagesList}
+              // Visually invert: newest (index 0) renders at the bottom
+              style={styles.invertedList}
               onScroll={(event) => {
                 const offsetY = event.nativeEvent.contentOffset.y
+                // In an inverted list, offset 0 = bottom (newest messages)
                 setIsAtBottom(offsetY < 32)
               }}
             />
@@ -701,6 +733,12 @@ const styles = StyleSheet.create({
   messagesContainer: {
     flex: 1,
   },
+  invertedList: {
+    transform: [{ scaleY: -1 }],
+  },
+  invertedRow: {
+    transform: [{ scaleY: -1 }],
+  },
   emptyState: {
     flex: 1,
     justifyContent: "center",
@@ -764,6 +802,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: palette.smoke[11],
+  },
+  // --- Timestamps ---
+  timestampRight: {
+    fontSize: 11,
+    color: palette.smoke[6],
+    alignSelf: "flex-end",
+    marginTop: 2,
+  },
+  timestampLeft: {
+    fontSize: 11,
+    color: palette.smoke[6],
+    marginTop: 2,
   },
   // --- Assistant messages (full width, no chrome) ---
   assistantRow: {

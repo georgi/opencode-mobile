@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import { colors, palette } from "../constants/theme"
+import * as Haptics from "expo-haptics"
 
 export default function NotificationsScreen() {
     const navigation =
@@ -35,6 +36,7 @@ export default function NotificationsScreen() {
 
     const handleRespond = async (id: string, reply: "once" | "always" | "reject") => {
         if (respondingIds.has(id)) return
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
         setRespondingIds((prev) => new Set(prev).add(id))
         try {
             await respondToPermission(id, reply)

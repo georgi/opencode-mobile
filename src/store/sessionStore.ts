@@ -69,6 +69,9 @@ export type SessionState = {
   eventSessionId?: string
   isEventSourceConnected: boolean
   eventSourceReconnectTimer?: ReturnType<typeof setTimeout>
+
+  // Internal: guards stale fetchMessages responses
+  _fetchSeq: number
 }
 
 export const initialSessionState: SessionState = {
@@ -95,6 +98,8 @@ export const initialSessionState: SessionState = {
   eventSessionId: undefined,
   isEventSourceConnected: false,
   eventSourceReconnectTimer: undefined,
+
+  _fetchSeq: 0,
 }
 
 type SessionActions = {
@@ -143,6 +148,7 @@ type SessionActions = {
     requestId: string,
     reply: "once" | "always" | "reject"
   ) => Promise<boolean>
+  deleteSession: (sessionId: string) => Promise<boolean>
   shareSession: (sessionId: string) => Promise<Session | undefined>
   unshareSession: (sessionId: string) => Promise<Session | undefined>
   subscribeToEvents: (sessionId?: string) => Promise<void>
@@ -163,7 +169,7 @@ const resolveData = <TData>(result: ResultFields<TData>) => {
 
 const getMessageTimestamp = (message: Message) => message.time?.created ?? 0
 
-// Oldest-first: inverted FlashList renders last index at visual top (oldest)
+// Oldest-first: SessionDetailScreen reverses for the visually-inverted FlashList
 const sortMessages = (messages: Message[]) =>
   [...messages].sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b))
 
@@ -412,6 +418,12 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         break
       }
 
+      case "session.status": {
+        const status = event.properties.status
+        set({ isAgentWorking: status.type === "busy" })
+        break
+      }
+
       default:
         break
     }
@@ -560,7 +572,15 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
     setServer: (server) => set({ currentServer: server }),
     setProject: (project) => set({ currentProject: project }),
-    setSession: (session) => set({ currentSession: session }),
+    setSession: (session) => {
+      const prev = get().currentSession
+      if (prev?.id !== session?.id) {
+        // Clear stale data from previous session
+        set({ currentSession: session, messages: [], messageParts: {}, isAgentWorking: false })
+      } else {
+        set({ currentSession: session })
+      }
+    },
     setSessions: (sessions) => set({ sessions }),
     setMessages: (messages) => set({ messages: sortMessages(messages) }),
     setMessageParts: (parts) => set({ messageParts: parts }),
@@ -756,9 +776,18 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
+      // Increment sequence so earlier in-flight fetches become stale
+      const seq = get()._fetchSeq + 1
+      set({ _fetchSeq: seq })
+
       const directory = getSessionDirectory()
       const result = await client.session.messages({ sessionID: sessionId, directory })
       const data = resolveData(result)
+
+      // Discard if a newer fetch was started while we were waiting
+      if (get()._fetchSeq !== seq) {
+        return undefined
+      }
 
       if (!data) {
         set({ lastError: "ERR SERVER UNAVAILABLE" })
@@ -913,6 +942,31 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
       return data
     },
+    deleteSession: async (sessionId) => {
+      const client = ensureClient()
+      if (!client) {
+        return false
+      }
+
+      const directory = getSessionDirectory()
+      const result = await client.session.delete({ sessionID: sessionId, directory })
+      const data = resolveData(result)
+
+      if (!data) {
+        set({ lastError: "ERR SERVER UNAVAILABLE" })
+        return false
+      }
+
+      set((state) => ({
+        sessions: state.sessions.filter((s) => s.id !== sessionId),
+        currentSession: state.currentSession?.id === sessionId ? undefined : state.currentSession,
+        messages: state.currentSession?.id === sessionId ? [] : state.messages,
+        messageParts: state.currentSession?.id === sessionId ? {} : state.messageParts,
+        lastError: undefined,
+      }))
+
+      return true
+    },
     shareSession: async (sessionId) => {
       const client = ensureClient()
       if (!client) {
@@ -1016,7 +1070,9 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
         es.addEventListener("open", () => {
           reconnectAttempts = 0
-          set({ isEventSourceConnected: true })
+          // Reset isAgentWorking on reconnect — if the agent is still busy,
+          // incoming SSE events (session.status "busy") will re-set it.
+          set({ isEventSourceConnected: true, isAgentWorking: false })
 
           // Re-fetch messages on reconnect to catch anything missed
           const currentSessionId = get().eventSessionId ?? get().currentSession?.id

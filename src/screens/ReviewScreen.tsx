@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView, RefreshControl, Platform } from "react-native"
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Platform, ScrollView } from "react-native"
+import { FlashList } from "@shopify/flash-list"
 import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
 import { Ionicons } from "@expo/vector-icons"
@@ -169,26 +170,28 @@ export default function ReviewScreen() {
                             </Text>
                         </Pressable>
                     </View>
-                    <ScrollView
-                        style={styles.fileList}
-                        showsVerticalScrollIndicator={true}
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={refreshing}
-                                onRefresh={() => void onRefresh()}
-                                tintColor={palette.smoke[7]}
-                            />
-                        }
-                    >
-                        {diffs.map((diff) => (
-                            <FileAccordionItem
-                                key={diff.file}
-                                diff={diff}
-                                isExpanded={expandedFiles.has(diff.file)}
-                                onToggle={() => toggleFile(diff.file)}
-                            />
-                        ))}
-                    </ScrollView>
+                    <View style={styles.fileList}>
+                        <FlashList
+                            data={diffs}
+                            keyExtractor={(item: FileDiff) => item.file}
+                            estimatedItemSize={56}
+                            extraData={expandedFiles}
+                            renderItem={({ item }: { item: FileDiff }) => (
+                                <FileAccordionItem
+                                    diff={item}
+                                    isExpanded={expandedFiles.has(item.file)}
+                                    onToggle={() => toggleFile(item.file)}
+                                />
+                            )}
+                            refreshControl={
+                                <RefreshControl
+                                    refreshing={refreshing}
+                                    onRefresh={() => void onRefresh()}
+                                    tintColor={palette.smoke[7]}
+                                />
+                            }
+                        />
+                    </View>
                 </>
             )}
         </View>
