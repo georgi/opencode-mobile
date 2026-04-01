@@ -18,6 +18,7 @@ import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { palette } from "../constants/theme"
+import { PressableScale } from "../components/PressableScale"
 import { ErrorBanner } from "../components/ErrorBanner"
 import * as Haptics from "expo-haptics"
 
@@ -48,6 +49,7 @@ export default function SessionsListScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
 
   const filteredSessions = useMemo(() => {
     if (!searchQuery.trim()) return sessions
@@ -132,9 +134,9 @@ export default function SessionsListScreen() {
       {/* Custom header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Pressable style={styles.headerButton} onPress={() => navigation.goBack()}>
+          <PressableScale style={styles.headerButton} onPress={() => navigation.goBack()}>
             <Ionicons name="chevron-back" size={22} color={palette.smoke[11]} />
-          </Pressable>
+          </PressableScale>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {projectName}
           </Text>
@@ -144,16 +146,19 @@ export default function SessionsListScreen() {
       <ErrorBanner />
 
       {sessions.length > 0 && (
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchContainer, isSearchFocused && styles.searchContainerFocused]}>
           <Ionicons name="search" size={16} color={palette.smoke[6]} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setIsSearchFocused(false)}
             placeholder="Search sessions..."
             placeholderTextColor={palette.smoke[6]}
             autoCapitalize="none"
             autoCorrect={false}
+            accessibilityLabel="Search sessions"
           />
           {searchQuery.length > 0 && (
             <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
@@ -161,6 +166,12 @@ export default function SessionsListScreen() {
             </Pressable>
           )}
         </View>
+      )}
+
+      {searchQuery.trim().length > 0 && filteredSessions.length > 0 && (
+        <Text style={styles.searchCount}>
+          {filteredSessions.length} {filteredSessions.length === 1 ? "session" : "sessions"}
+        </Text>
       )}
 
       {!currentProject ? (
@@ -199,9 +210,11 @@ export default function SessionsListScreen() {
               onSwipeableOpen={() => handleDeleteSession(item, swipeableRef)}
               overshootRight={false}
             >
-              <Pressable
+              <PressableScale
                 onPress={() => handleSelectSession(item.id)}
                 style={[styles.sessionItem, isActive && styles.sessionItemActive]}
+                accessibilityLabel={item.title || "Untitled session"}
+                accessibilityRole="button"
               >
                 <View style={styles.sessionInfo}>
                   <Text style={styles.sessionTitle} numberOfLines={1}>
@@ -212,7 +225,7 @@ export default function SessionsListScreen() {
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
-              </Pressable>
+              </PressableScale>
             </Swipeable>
             )
           }}
@@ -220,13 +233,15 @@ export default function SessionsListScreen() {
       )}
 
       {/* FAB */}
-      <Pressable
-        style={[styles.fab, { bottom: 20 + insets.bottom }, isCreating && { opacity: 0.5 }]}
+      <PressableScale
+        style={[styles.fab, { bottom: 20 + insets.bottom }]}
         onPress={() => void handleCreate()}
         disabled={isCreating}
+        accessibilityLabel="Create new session"
+        accessibilityRole="button"
       >
         <Ionicons name="add" size={28} color={palette.smoke[1]} />
-      </Pressable>
+      </PressableScale>
     </View>
   )
 }
@@ -259,7 +274,7 @@ const styles = StyleSheet.create({
     maxWidth: "80%",
   },
   headerButton: {
-    padding: 8,
+    padding: 10,
   },
   // --- Search ---
   searchContainer: {
@@ -272,6 +287,11 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 10,
     backgroundColor: palette.smoke[2],
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  searchContainerFocused: {
+    borderColor: palette.cobalt[9],
   },
   searchIcon: {
     marginRight: 8,
@@ -281,6 +301,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: palette.smoke[11],
     paddingVertical: 0,
+  },
+  searchCount: {
+    fontSize: 12,
+    color: palette.smoke[6],
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 2,
   },
   // --- Content ---
   emptyState: {

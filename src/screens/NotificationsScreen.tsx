@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import { colors, palette } from "../constants/theme"
+import { PressableScale } from "../components/PressableScale"
 import * as Haptics from "expo-haptics"
 
 export default function NotificationsScreen() {
@@ -69,7 +70,7 @@ export default function NotificationsScreen() {
                         </Text>
                     </View>
                 )}
-                <Pressable
+                <PressableScale
                     onPress={() => void fetchPermissions()}
                     hitSlop={12}
                 >
@@ -78,7 +79,7 @@ export default function NotificationsScreen() {
                         size={20}
                         color={palette.smoke[7]}
                     />
-                </Pressable>
+                </PressableScale>
             </View>
 
             {pendingPermissions.length === 0 ? (
@@ -97,29 +98,35 @@ export default function NotificationsScreen() {
                             {permission.patterns.join(", ")}
                         </Text>
                         <View style={styles.permissionActions}>
-                            <Pressable
-                                style={[styles.actionButton, respondingIds.has(permission.id) && { opacity: 0.5 }]}
+                            <PressableScale
+                                style={[styles.actionButton]}
                                 onPress={() => void handleRespond(permission.id, "once")}
                                 disabled={respondingIds.has(permission.id)}
+                                accessibilityLabel="Allow once"
+                                accessibilityRole="button"
                             >
                                 <Text style={styles.actionButtonText}>Once</Text>
-                            </Pressable>
-                            <Pressable
-                                style={[styles.actionButton, respondingIds.has(permission.id) && { opacity: 0.5 }]}
+                            </PressableScale>
+                            <PressableScale
+                                style={[styles.actionButton]}
                                 onPress={() => void handleRespond(permission.id, "always")}
                                 disabled={respondingIds.has(permission.id)}
+                                accessibilityLabel="Allow always"
+                                accessibilityRole="button"
                             >
                                 <Text style={styles.actionButtonText}>Always</Text>
-                            </Pressable>
-                            <Pressable
-                                style={[styles.rejectButton, respondingIds.has(permission.id) && { opacity: 0.5 }]}
+                            </PressableScale>
+                            <PressableScale
+                                style={[styles.rejectButton]}
                                 onPress={() => void handleRespond(permission.id, "reject")}
                                 disabled={respondingIds.has(permission.id)}
+                                accessibilityLabel="Reject"
+                                accessibilityRole="button"
                             >
                                 <Text style={styles.rejectButtonText}>Reject</Text>
-                            </Pressable>
+                            </PressableScale>
                         </View>
-                        <Pressable
+                        <PressableScale
                             onPress={() =>
                                 navigation.navigate("SessionDetail", {
                                     sessionId: permission.sessionID,
@@ -127,7 +134,7 @@ export default function NotificationsScreen() {
                             }
                         >
                             <Text style={styles.openSessionText}>Open Session</Text>
-                        </Pressable>
+                        </PressableScale>
                     </View>
                 ))
             )}

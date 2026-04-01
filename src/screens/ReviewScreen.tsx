@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, RefreshControl, Platform, ScrollView } from "react-native"
+import { View, Text, StyleSheet, Pressable, RefreshControl, Platform, ScrollView } from "react-native"
 import { FlashList } from "@shopify/flash-list"
 import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
@@ -9,6 +9,7 @@ import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 import { colors, palette } from "../constants/theme"
+import { PressableScale } from "../components/PressableScale"
 
 function DiffViewer({ diff }: { diff: FileDiff }) {
     const [showUnchanged, setShowUnchanged] = useState(false)
@@ -22,15 +23,15 @@ function DiffViewer({ diff }: { diff: FileDiff }) {
 
     return (
         <View style={styles.diffContainer}>
-            <Pressable onPress={() => setShowUnchanged(!showUnchanged)} style={styles.diffToggle}>
+            <PressableScale onPress={() => setShowUnchanged(!showUnchanged)} style={styles.diffToggle}>
                 <Text style={styles.diffToggleText}>
                     {showUnchanged ? "Hide" : "Show"} unchanged lines ({unchangedCount})
                 </Text>
                 <Text style={styles.diffToggleIcon}>{showUnchanged ? "▲" : "▼"}</Text>
-            </Pressable>
+            </PressableScale>
             {visibleParts.map((part, index) => {
                 const linePrefix = part.added ? "+" : part.removed ? "-" : " "
-                const lineColor = part.added ? colors.diff.add : part.removed ? colors.diff.delete : colors.text.weak
+                const lineColor = part.added ? palette.mint[12] : part.removed ? palette.ember[12] : colors.text.weak
                 const bgColor = part.added ? colors.diff.addBg : part.removed ? colors.diff.deleteBg : "transparent"
 
                 return (
@@ -57,7 +58,7 @@ function FileAccordionItem({
 }) {
     return (
         <View style={styles.accordionItem}>
-            <Pressable onPress={onToggle} style={styles.accordionHeader}>
+            <PressableScale onPress={onToggle} style={styles.accordionHeader}>
                 <View style={styles.accordionHeaderLeft}>
                     <Text style={styles.accordionIcon}>{isExpanded ? "▼" : "▶"}</Text>
                     <Text style={styles.accordionFilename} numberOfLines={1}>{diff.file}</Text>
@@ -66,7 +67,7 @@ function FileAccordionItem({
                     <Text style={styles.diffStatAdded}>+{diff.additions}</Text>
                     <Text style={styles.diffStatRemoved}>-{diff.deletions}</Text>
                 </View>
-            </Pressable>
+            </PressableScale>
             {isExpanded ? (
                 <View style={styles.accordionContent}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.diffScrollView}>
@@ -136,16 +137,18 @@ export default function ReviewScreen() {
 
             {isDiffsLoading ? (
                 <View style={styles.loadingState}>
-                    <ActivityIndicator size="large" color={colors.interactive.base} />
+                    <View style={styles.skeletonCard} />
+                    <View style={styles.skeletonCard} />
+                    <View style={styles.skeletonCard} />
                     <Text style={styles.loadingText}>Loading diffs...</Text>
                 </View>
             ) : diffsError ? (
                 <View style={styles.emptyState}>
                     <Text style={styles.emptyStateText}>{diffsError}</Text>
                     {sessionId ? (
-                        <Pressable style={styles.button} onPress={() => void fetchDiffs(sessionId)}>
+                        <PressableScale style={styles.button} onPress={() => void fetchDiffs(sessionId)}>
                             <Text style={styles.buttonText}>Retry</Text>
-                        </Pressable>
+                        </PressableScale>
                     ) : null}
                 </View>
             ) : diffs.length === 0 ? (
@@ -153,6 +156,7 @@ export default function ReviewScreen() {
                     <Ionicons name="checkmark-done-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
                     <Text style={styles.emptyStateText}>No changes</Text>
                     <Text style={styles.emptyStateHint}>This session hasn't modified any files yet.</Text>
+                    <Text style={styles.emptyStateHint}>Changes made by the agent will appear here.</Text>
                 </View>
             ) : (
                 <>
@@ -164,11 +168,11 @@ export default function ReviewScreen() {
                             <Text style={styles.summaryAdded}>+{summary.totalAdditions}</Text>
                             <Text style={styles.summaryRemoved}>-{summary.totalDeletions}</Text>
                         </View>
-                        <Pressable onPress={allExpanded ? collapseAll : expandAll} hitSlop={8}>
+                        <PressableScale onPress={allExpanded ? collapseAll : expandAll} hitSlop={8}>
                             <Text style={styles.expandCollapseText}>
                                 {allExpanded ? "Collapse all" : "Expand all"}
                             </Text>
-                        </Pressable>
+                        </PressableScale>
                     </View>
                     <View style={styles.fileList}>
                         <FlashList
@@ -214,6 +218,13 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         gap: 8,
+    },
+    skeletonCard: {
+        height: 48,
+        borderRadius: 8,
+        backgroundColor: palette.smoke[3],
+        marginBottom: 8,
+        alignSelf: "stretch",
     },
     loadingText: {
         fontSize: 14,
@@ -325,7 +336,7 @@ const styles = StyleSheet.create({
         alignItems: "flex-start",
     },
     diffLinePrefix: {
-        width: 20,
+        width: 24,
         alignItems: "center",
         paddingTop: 0,
     },

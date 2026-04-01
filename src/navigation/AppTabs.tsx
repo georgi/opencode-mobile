@@ -1,5 +1,5 @@
 import React from "react"
-import { View, Text, StyleSheet } from "react-native"
+import { View, Text, StyleSheet, StatusBar } from "react-native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Ionicons } from "@expo/vector-icons"
 import ProjectsStack from "./ProjectsStack"
@@ -20,8 +20,8 @@ function OfflineBanner() {
   const isOffline = useSessionStore((s) => s.isOffline)
   if (!isOffline) return null
   return (
-    <View style={bannerStyles.error}>
-      <Ionicons name="cloud-offline-outline" size={14} color={palette.ember[9]} />
+    <View style={bannerStyles.error} accessibilityLabel="App is offline" accessibilityRole="alert">
+      <Ionicons name="cloud-offline-outline" size={16} color={palette.ember[9]} />
       <Text style={bannerStyles.errorText}>No connection</Text>
     </View>
   )
@@ -35,8 +35,8 @@ function ReconnectingBanner() {
   // and there's no active eventSource (meaning we're between reconnect attempts)
   if (isOffline || isConnected || eventSource) return null
   return (
-    <View style={bannerStyles.warning}>
-      <Ionicons name="sync-outline" size={14} color={palette.solaris[9]} />
+    <View style={bannerStyles.warning} accessibilityLabel="Reconnecting to server" accessibilityRole="alert">
+      <Ionicons name="sync-outline" size={16} color={palette.solaris[9]} />
       <Text style={bannerStyles.warningText}>Reconnecting...</Text>
     </View>
   )
@@ -48,12 +48,13 @@ const bannerStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
     backgroundColor: palette.ember[2],
   },
   errorText: {
     color: palette.ember[9],
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "500",
   },
   warning: {
@@ -61,12 +62,13 @@ const bannerStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
     backgroundColor: palette.solaris[2],
   },
   warningText: {
     color: palette.solaris[9],
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "500",
   },
 })
@@ -104,6 +106,7 @@ const badgeStyles = StyleSheet.create({
 export default function AppTabs() {
   return (
     <>
+    <StatusBar barStyle="light-content" />
     <OfflineBanner />
     <ReconnectingBanner />
     <Tab.Navigator

@@ -558,7 +558,7 @@ describe("Sprint Features - message.updated event sets isAgentWorking false for 
     const message = createMockUserMessage("msg-1", "session-1", 1000)
 
     // Simulate handleEvent for message.updated with user role
-    if (message.role === "assistant") {
+    if ((message as { role: string }).role === "assistant") {
       useSessionStore.setState({ isAgentWorking: false })
     }
 

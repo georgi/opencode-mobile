@@ -11,6 +11,7 @@ import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Project } from "@opencode-ai/sdk/v2/client"
 import type { AppTabParamList } from "../navigation/AppTabs"
 import { palette } from "../constants/theme"
+import { PressableScale } from "../components/PressableScale"
 import { ErrorBanner } from "../components/ErrorBanner"
 
 type ProjectsHomeNavigation = CompositeNavigationProp<
@@ -53,12 +54,12 @@ export default function ProjectsHomeScreen() {
             <Text style={styles.welcomeSubtitle}>
               Connect to your first server to get started.
             </Text>
-            <Pressable
+            <PressableScale
               style={styles.welcomeButton}
               onPress={() => navigation.navigate("Settings" as never)}
             >
               <Text style={styles.welcomeButtonText}>Set Up Server</Text>
-            </Pressable>
+            </PressableScale>
             <Pressable onPress={() => navigation.navigate("Settings" as never)}>
               <Text style={styles.welcomeSecondary}>
                 Or scan your network to find servers automatically
@@ -89,7 +90,7 @@ export default function ProjectsHomeScreen() {
           renderItem={({ item }: { item: Project }) => {
             const isSelected = item.id === currentProject?.id
             return (
-              <Pressable
+              <PressableScale
                 onPress={() => {
                   selectProject(item)
                   navigation.navigate("SessionsList")
@@ -107,7 +108,7 @@ export default function ProjectsHomeScreen() {
                   ) : null}
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
-              </Pressable>
+              </PressableScale>
             )
           }}
         />

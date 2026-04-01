@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons"
 import * as Network from "expo-network"
 import { useSessionStore, type ServerConfig } from "../store/sessionStore"
 import { colors, palette } from "../constants/theme"
+import { PressableScale } from "../components/PressableScale"
 
 type DiscoveredServer = {
   name: string
@@ -98,6 +99,7 @@ export default function SettingsScreen() {
   const [baseUrlError, setBaseUrlError] = useState("")
   const [directory, setDirectory] = useState("")
   const [basicAuth, setBasicAuth] = useState("")
+  const [focusedInput, setFocusedInput] = useState<string | null>(null)
 
   const scanAbortRef = useRef<AbortController | null>(null)
 
@@ -194,7 +196,7 @@ export default function SettingsScreen() {
             {servers.map((server) => {
               const isActive = server.id === currentServerId
               return (
-                <Pressable
+                <PressableScale
                   key={server.id}
                   onPress={() => void selectServer(server.id)}
                   style={[styles.serverItem, isActive && styles.serverItemActive]}
@@ -208,7 +210,7 @@ export default function SettingsScreen() {
                     <Text style={styles.serverMeta}>{server.directory}</Text>
                   </View>
                   <View style={styles.serverActions}>
-                    <Pressable
+                    <PressableScale
                       hitSlop={8}
                       onPress={() => {
                         setEditingServerId(server.id)
@@ -219,8 +221,8 @@ export default function SettingsScreen() {
                       }}
                     >
                       <Ionicons name="pencil" size={18} color={palette.smoke[9]} />
-                    </Pressable>
-                    <Pressable
+                    </PressableScale>
+                    <PressableScale
                       hitSlop={8}
                       onPress={() => {
                         Alert.alert(
@@ -238,9 +240,9 @@ export default function SettingsScreen() {
                       }}
                     >
                       <Ionicons name="trash-outline" size={18} color={palette.ember[9]} />
-                    </Pressable>
+                    </PressableScale>
                   </View>
-                </Pressable>
+                </PressableScale>
               )
             })}
           </View>
@@ -250,17 +252,17 @@ export default function SettingsScreen() {
       {/* Section 3: Discover on LAN */}
       <Text style={styles.sectionLabel}>Discover on LAN</Text>
       <View style={styles.card}>
-        <Pressable onPress={startScan} disabled={isScanning} style={styles.scanRow}>
+        <PressableScale onPress={startScan} disabled={isScanning} style={styles.scanRow}>
           {isScanning ? (
             <ActivityIndicator size="small" color={palette.smoke[7]} />
           ) : (
             <Ionicons name="search" size={18} color={palette.smoke[7]} />
           )}
           <Text style={styles.scanRowText}>{isScanning ? "Scanning..." : "Scan network"}</Text>
-        </Pressable>
+        </PressableScale>
         {discovered.length > 0 &&
           discovered.map((server) => (
-            <Pressable
+            <PressableScale
               key={`${server.address}:${server.port}`}
               style={styles.discoveredRow}
               onPress={() => {
@@ -276,7 +278,7 @@ export default function SettingsScreen() {
                 <Text style={styles.discoveredAddress}>{server.address}:{server.port}</Text>
               </View>
               <Ionicons name="add-circle-outline" size={20} color={palette.smoke[7]} />
-            </Pressable>
+            </PressableScale>
           ))
         }
         {isScanning && discovered.length === 0 && (
@@ -288,52 +290,60 @@ export default function SettingsScreen() {
       <Text style={styles.sectionLabel}>{editingServerId ? "Edit Server" : "Add Server"}</Text>
       <View style={styles.card}>
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedInput === "label" && styles.inputFocused]}
           value={label}
           onChangeText={setLabel}
+          onFocus={() => setFocusedInput("label")}
+          onBlur={() => setFocusedInput(null)}
           placeholder="Label (e.g. Work)"
           placeholderTextColor={palette.smoke[7]}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedInput === "baseUrl" && styles.inputFocused]}
           value={baseUrl}
           onChangeText={(text) => {
             setBaseUrl(text)
             if (baseUrlError) setBaseUrlError("")
           }}
+          onFocus={() => setFocusedInput("baseUrl")}
+          onBlur={() => setFocusedInput(null)}
           placeholder="Base URL"
           placeholderTextColor={palette.smoke[7]}
           autoCapitalize="none"
         />
         {baseUrlError ? <Text style={styles.baseUrlError}>{baseUrlError}</Text> : null}
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedInput === "directory" && styles.inputFocused]}
           value={directory}
           onChangeText={setDirectory}
+          onFocus={() => setFocusedInput("directory")}
+          onBlur={() => setFocusedInput(null)}
           placeholder="Directory"
           placeholderTextColor={palette.smoke[7]}
           autoCapitalize="none"
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, focusedInput === "basicAuth" && styles.inputFocused]}
           value={basicAuth}
           onChangeText={setBasicAuth}
+          onFocus={() => setFocusedInput("basicAuth")}
+          onBlur={() => setFocusedInput(null)}
           placeholder="Basic auth token"
           placeholderTextColor={palette.smoke[7]}
           autoCapitalize="none"
           secureTextEntry
         />
-        <Pressable
+        <PressableScale
           onPress={() => void handleSave()}
           style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
           disabled={!canSave}
         >
           <Text style={styles.saveText}>{editingServerId ? "Update Server" : "Save Server"}</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       {editingServerId ? (
-        <Pressable
+        <PressableScale
           onPress={() => {
             setEditingServerId(undefined)
             setLabel("")
@@ -344,7 +354,7 @@ export default function SettingsScreen() {
           style={styles.cancelButton}
         >
           <Text style={styles.cancelText}>Cancel Edit</Text>
-        </Pressable>
+        </PressableScale>
       ) : null}
     </ScrollView>
   )
@@ -507,6 +517,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: palette.smoke[11],
     backgroundColor: palette.smoke[3],
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  inputFocused: {
+    borderColor: palette.cobalt[9],
   },
   baseUrlError: {
     color: palette.ember[9],

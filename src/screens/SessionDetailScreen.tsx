@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from "react"
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import {
   View,
@@ -24,6 +24,7 @@ import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Message, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2/client"
 import { colors, palette } from "../constants/theme"
 import { ErrorBanner } from "../components/ErrorBanner"
+import { PressableScale } from "../components/PressableScale"
 import * as Clipboard from "expo-clipboard"
 import * as Haptics from "expo-haptics"
 
@@ -134,6 +135,45 @@ function groupParts(parts: Part[]): PartSegment[] {
   return segments
 }
 
+// --- MessageSkeleton ---
+
+function MessageSkeleton() {
+  return (
+    <View style={skeletonStyles.container}>
+      <View style={skeletonStyles.assistantBlock} />
+      <View style={skeletonStyles.userRow}>
+        <View style={skeletonStyles.userBlock} />
+      </View>
+      <View style={skeletonStyles.assistantBlock} />
+      <View style={skeletonStyles.userRow}>
+        <View style={skeletonStyles.userBlock} />
+      </View>
+    </View>
+  )
+}
+
+const skeletonStyles = StyleSheet.create({
+  container: {
+    padding: 16,
+    gap: 12,
+  },
+  assistantBlock: {
+    width: "70%",
+    height: 60,
+    borderRadius: 14,
+    backgroundColor: palette.smoke[3],
+  },
+  userRow: {
+    alignItems: "flex-end",
+  },
+  userBlock: {
+    width: "50%",
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: palette.smoke[3],
+  },
+})
+
 // --- ThinkingIndicator ---
 
 const ThinkingIndicator = React.memo(function ThinkingIndicator() {
@@ -170,7 +210,7 @@ const ToolCallRow = React.memo(function ToolCallRow({ tool, onPress }: { tool: T
         : ""
 
   return (
-    <Pressable style={styles.toolRow} onPress={onPress}>
+    <PressableScale style={styles.toolRow} onPress={onPress}>
       <Ionicons name="chevron-forward" size={12} color={statusColor} />
       <Text
         style={[styles.toolName, isError && { color: palette.ember[11] }]}
@@ -182,7 +222,7 @@ const ToolCallRow = React.memo(function ToolCallRow({ tool, onPress }: { tool: T
         <Text style={styles.toolTitle} numberOfLines={1}>{title}</Text>
       ) : null}
       {isRunning && <ActivityIndicator size="small" color={palette.solaris[9]} style={{ marginLeft: 4 }} />}
-    </Pressable>
+    </PressableScale>
   )
 })
 
@@ -209,9 +249,9 @@ const ToolCallGroup = React.memo(function ToolCallGroup({ tools }: { tools: Tool
           <View style={styles.toolOverlayCard}>
             <View style={styles.toolOverlayHeader}>
               <Text style={styles.toolOverlayTitle}>{selectedTool?.tool}</Text>
-              <Pressable onPress={() => setSelectedTool(null)}>
+              <PressableScale onPress={() => setSelectedTool(null)} style={{ padding: 12 }}>
                 <Ionicons name="close" size={20} color={palette.smoke[9]} />
-              </Pressable>
+              </PressableScale>
             </View>
             {selectedTool?.state && "input" in selectedTool.state && (
               <View style={styles.toolOverlaySection}>
@@ -304,6 +344,7 @@ function ModelPicker({
   const selectedModel = useSessionStore((state) => state.selectedModel)
   const setSelectedModel = useSessionStore((state) => state.setSelectedModel)
   const [modelSearch, setModelSearch] = useState("")
+  const [isModelSearchFocused, setIsModelSearchFocused] = useState(false)
 
   const providerOptions = useMemo(
     () =>
@@ -340,9 +381,11 @@ function ModelPicker({
         <View style={styles.modalCard}>
           <Text style={styles.modalTitle}>Select model</Text>
           <TextInput
-            style={styles.modalSearch}
+            style={[styles.modalSearch, isModelSearchFocused && styles.modalSearchFocused]}
             value={modelSearch}
             onChangeText={setModelSearch}
+            onFocus={() => setIsModelSearchFocused(true)}
+            onBlur={() => setIsModelSearchFocused(false)}
             placeholder="Search models..."
             placeholderTextColor={colors.text.weaker}
             autoFocus
@@ -359,14 +402,14 @@ function ModelPicker({
                     const isSelected =
                       selectedModel?.providerID === recent.providerID && selectedModel?.modelID === recent.modelID
                     return (
-                      <Pressable
+                      <PressableScale
                         key={`recent-${recent.providerID}/${recent.modelID}`}
                         style={[styles.modalItem, isSelected && styles.modalItemActive]}
                         onPress={() => handleSelect(recent.providerID, recent.modelID)}
                       >
                         <Text style={styles.modalItemText}>{model.name ?? recent.modelID}</Text>
                         <Text style={styles.modalItemSubtext}>{provider?.name}</Text>
-                      </Pressable>
+                      </PressableScale>
                     )
                   })}
                 </View>
@@ -392,13 +435,13 @@ function ModelPicker({
                         const isSelected =
                           selectedModel?.providerID === option.providerID && selectedModel?.modelID === option.modelID
                         return (
-                          <Pressable
+                          <PressableScale
                             key={`${option.providerID}/${option.modelID}`}
                             style={[styles.modalItem, isSelected && styles.modalItemActive]}
                             onPress={() => handleSelect(option.providerID, option.modelID)}
                           >
                             <Text style={styles.modalItemText}>{option.label}</Text>
-                          </Pressable>
+                          </PressableScale>
                         )
                       })
                     )}
@@ -463,6 +506,7 @@ export default function SessionDetailScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false)
+  const [isComposerFocused, setIsComposerFocused] = useState(false)
   const flatListRef = useRef<FlashListRef<Message>>(null)
 
   useEffect(() => {
@@ -524,24 +568,26 @@ export default function SessionDetailScreen() {
     >
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerLeft}>
-          <Pressable style={styles.headerButton} onPress={() => navigation.goBack()}>
+          <PressableScale style={styles.headerButton} onPress={() => navigation.goBack()} accessibilityLabel="Go back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={22} color={colors.text.base} />
-          </Pressable>
+          </PressableScale>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {currentSession?.title ?? "Session"}
           </Text>
         </View>
         <View style={styles.headerRight}>
           {isAgentWorking && sessionId ? (
-            <Pressable
+            <PressableScale
               style={styles.headerButton}
               onPress={() => void abortSession(sessionId)}
+              accessibilityLabel="Stop agent"
+              accessibilityRole="button"
             >
               <Ionicons name="stop" size={18} color={palette.ember[9]} />
-            </Pressable>
+            </PressableScale>
           ) : null}
           {sessionId ? (
-            <Pressable
+            <PressableScale
               style={[styles.headerButton, !currentSession?.revert?.messageID && styles.headerButtonDisabled]}
               onPress={() => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -552,37 +598,45 @@ export default function SessionDetailScreen() {
                 )
               }}
               disabled={!currentSession?.revert?.messageID}
+              accessibilityLabel="Undo"
+              accessibilityRole="button"
             >
               <Ionicons name="arrow-undo" size={18} color={currentSession?.revert?.messageID ? colors.interactive.base : palette.smoke[4]} />
-            </Pressable>
+            </PressableScale>
           ) : null}
           {sessionId ? (
-            <Pressable
+            <PressableScale
               style={[styles.headerButton, !currentSession?.revert?.messageID && styles.headerButtonDisabled]}
               onPress={() => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
                 void unrevertSession(sessionId)
               }}
               disabled={!currentSession?.revert?.messageID}
+              accessibilityLabel="Redo"
+              accessibilityRole="button"
             >
               <Ionicons name="arrow-redo" size={18} color={currentSession?.revert?.messageID ? colors.interactive.base : palette.smoke[4]} />
-            </Pressable>
+            </PressableScale>
           ) : null}
           {sessionId ? (
-            <Pressable
+            <PressableScale
               style={styles.headerButton}
               onPress={() => navigation.navigate("Review", { sessionId })}
+              accessibilityLabel="Review changes"
+              accessibilityRole="button"
             >
               <Ionicons name="git-pull-request" size={18} color={colors.interactive.base} />
-            </Pressable>
+            </PressableScale>
           ) : null}
           {sessionId ? (
-            <Pressable
+            <PressableScale
               style={styles.headerButton}
               onPress={() => navigation.navigate("Share", { sessionId })}
+              accessibilityLabel="Share session"
+              accessibilityRole="button"
             >
               <Ionicons name="share-outline" size={18} color={colors.interactive.base} />
-            </Pressable>
+            </PressableScale>
           ) : null}
         </View>
       </View>
@@ -590,7 +644,7 @@ export default function SessionDetailScreen() {
       <View style={styles.messagesContainer}>
         {isLoading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color={colors.interactive.base} />
+            <MessageSkeleton />
             <Text style={styles.loadingText}>Loading messages...</Text>
           </View>
         ) : messages.length === 0 ? (
@@ -648,12 +702,14 @@ export default function SessionDetailScreen() {
 
       {sessionId && (
         <View style={styles.composer}>
-          <View style={styles.composerCard}>
+          <View style={[styles.composerCard, isComposerFocused && styles.composerCardFocused]}>
             <TextInput
               style={styles.composerInput}
               value={inputText}
               onChangeText={setInputText}
               onSubmitEditing={handleSend}
+              onFocus={() => setIsComposerFocused(true)}
+              onBlur={() => setIsComposerFocused(false)}
               placeholder="Type a message..."
               placeholderTextColor={colors.text.weaker}
               selectionColor={colors.interactive.base}
@@ -661,7 +717,7 @@ export default function SessionDetailScreen() {
               maxLength={10000}
             />
             <View style={styles.composerBar}>
-              <Pressable
+              <PressableScale
                 style={styles.modelChip}
                 onPress={() => {
                   void useSessionStore.getState().fetchProviders()
@@ -672,17 +728,24 @@ export default function SessionDetailScreen() {
                   {modelDisplayName}
                 </Text>
                 <Ionicons name="chevron-down" size={10} color={palette.smoke[7]} />
-              </Pressable>
+              </PressableScale>
               <View style={{ flex: 1 }} />
-              <Pressable
+              <PressableScale
                 style={[
                   styles.sendButton,
                   (!inputText.trim() || isAgentWorking) && styles.sendButtonDisabled,
                 ]}
                 onPress={handleSend}
+                disabled={!inputText.trim() && !isAgentWorking}
+                accessibilityLabel="Send message"
+                accessibilityRole="button"
               >
-                <Ionicons name="arrow-up" size={20} color={palette.smoke[1]} />
-              </Pressable>
+                {isAgentWorking ? (
+                  <ActivityIndicator size="small" color={palette.smoke[1]} />
+                ) : (
+                  <Ionicons name="arrow-up" size={20} color={palette.smoke[1]} />
+                )}
+              </PressableScale>
             </View>
           </View>
         </View>
@@ -725,7 +788,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerButton: {
-    padding: 8,
+    padding: 10,
   },
   headerButtonDisabled: {
     opacity: 0.4,
@@ -908,6 +971,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: "hidden",
   },
+  composerCardFocused: {
+    borderColor: palette.cobalt[9],
+  },
   composerInput: {
     paddingHorizontal: 14,
     paddingTop: 12,
@@ -928,8 +994,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     backgroundColor: palette.smoke[3],
     borderRadius: 6,
   },
@@ -938,7 +1004,7 @@ const styles = StyleSheet.create({
     color: palette.smoke[9],
   },
   modelChipTextEmpty: {
-    color: palette.smoke[7],
+    color: palette.smoke[6],
   },
   composerAction: {
     padding: 6,
@@ -955,12 +1021,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sendButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.3,
   },
   // --- Modal ---
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
@@ -989,6 +1055,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.base,
     backgroundColor: colors.surface.base,
+  },
+  modalSearchFocused: {
+    borderColor: palette.cobalt[9],
   },
   modalList: {
     gap: 8,

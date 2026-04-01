@@ -15,6 +15,7 @@ import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import { colors, palette } from "../constants/theme"
 import { Pressable } from "react-native"
+import { PressableScale } from "../components/PressableScale"
 import { ErrorBanner } from "../components/ErrorBanner"
 
 export default function ShareScreen() {
@@ -107,14 +108,14 @@ export default function ShareScreen() {
                         {shareUrl}
                     </Text>
                     <View style={styles.buttonRow}>
-                        <Pressable style={styles.button} onPress={() => void handleCopy()}>
+                        <PressableScale style={styles.button} onPress={() => void handleCopy()}>
                             <Ionicons name={copied ? "checkmark" : "copy-outline"} size={16} color={colors.text.invert} />
                             <Text style={styles.buttonText}>{copied ? "Copied!" : "Copy"}</Text>
-                        </Pressable>
-                        <Pressable style={styles.button} onPress={() => void handleShare()}>
+                        </PressableScale>
+                        <PressableScale style={styles.button} onPress={() => void handleShare()}>
                             <Ionicons name="share-outline" size={16} color={colors.text.invert} />
                             <Text style={styles.buttonText}>Share</Text>
-                        </Pressable>
+                        </PressableScale>
                     </View>
                 </View>
             ) : null}
