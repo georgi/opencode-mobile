@@ -6,6 +6,10 @@ import {
   deleteServerSecrets,
   loadCurrentServerId,
   saveCurrentServerId,
+  loadSelectedModel,
+  saveSelectedModel,
+  loadRecentModels,
+  saveRecentModel,
 } from "../../src/storage/serverStorage"
 
 const mockAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>
@@ -233,6 +237,150 @@ describe("serverStorage", () => {
       await saveCurrentServerId("")
 
       expect(mockAsyncStorage.removeItem).toHaveBeenCalledWith("opencode.currentServerId.v1")
+    })
+  })
+
+  describe("loadSelectedModel", () => {
+    it("returns undefined when no stored data", async () => {
+      mockAsyncStorage.getItem.mockResolvedValue(null)
+
+      const result = await loadSelectedModel()
+
+      expect(result).toBeUndefined()
+      expect(mockAsyncStorage.getItem).toHaveBeenCalledWith("opencode.selectedModel.v1")
+    })
+
+    it("returns parsed model when stored", async () => {
+      const model = { providerID: "openai", modelID: "gpt-4" }
+      mockAsyncStorage.getItem.mockResolvedValue(JSON.stringify(model))
+
+      const result = await loadSelectedModel()
+
+      expect(result).toEqual(model)
+    })
+  })
+
+  describe("saveSelectedModel", () => {
+    it("saves model when provided", async () => {
+      const model = { providerID: "openai", modelID: "gpt-4" }
+
+      await saveSelectedModel(model)
+
+      expect(mockAsyncStorage.setItem).toHaveBeenCalledWith(
+        "opencode.selectedModel.v1",
+        JSON.stringify(model)
+      )
+    })
+
+    it("removes stored value when model is undefined", async () => {
+      await saveSelectedModel(undefined)
+
+      expect(mockAsyncStorage.removeItem).toHaveBeenCalledWith("opencode.selectedModel.v1")
+    })
+
+    it("removes stored value when called without arguments", async () => {
+      await saveSelectedModel()
+
+      expect(mockAsyncStorage.removeItem).toHaveBeenCalledWith("opencode.selectedModel.v1")
+    })
+  })
+
+  describe("loadRecentModels", () => {
+    it("returns empty array when no stored data", async () => {
+      mockAsyncStorage.getItem.mockResolvedValue(null)
+
+      const result = await loadRecentModels()
+
+      expect(result).toEqual([])
+      expect(mockAsyncStorage.getItem).toHaveBeenCalledWith("opencode.recentModels.v1")
+    })
+
+    it("returns parsed array when stored", async () => {
+      const models = [
+        { providerID: "openai", modelID: "gpt-4" },
+        { providerID: "anthropic", modelID: "claude-3" },
+      ]
+      mockAsyncStorage.getItem.mockResolvedValue(JSON.stringify(models))
+
+      const result = await loadRecentModels()
+
+      expect(result).toEqual(models)
+    })
+  })
+
+  describe("saveRecentModel", () => {
+    it("saves model to empty recent list", async () => {
+      mockAsyncStorage.getItem.mockResolvedValue(null)
+      const model = { providerID: "openai", modelID: "gpt-4" }
+
+      await saveRecentModel(model)
+
+      expect(mockAsyncStorage.setItem).toHaveBeenCalledWith(
+        "opencode.recentModels.v1",
+        JSON.stringify([model])
+      )
+    })
+
+    it("prepends model and deduplicates", async () => {
+      const existing = [
+        { providerID: "openai", modelID: "gpt-4" },
+        { providerID: "anthropic", modelID: "claude-3" },
+      ]
+      mockAsyncStorage.getItem.mockResolvedValue(JSON.stringify(existing))
+
+      const model = { providerID: "openai", modelID: "gpt-4" }
+      await saveRecentModel(model)
+
+      expect(mockAsyncStorage.setItem).toHaveBeenCalledWith(
+        "opencode.recentModels.v1",
+        JSON.stringify([
+          { providerID: "openai", modelID: "gpt-4" },
+          { providerID: "anthropic", modelID: "claude-3" },
+        ])
+      )
+    })
+
+    it("prepends new model to existing list", async () => {
+      const existing = [
+        { providerID: "anthropic", modelID: "claude-3" },
+      ]
+      mockAsyncStorage.getItem.mockResolvedValue(JSON.stringify(existing))
+
+      const model = { providerID: "openai", modelID: "gpt-4" }
+      await saveRecentModel(model)
+
+      expect(mockAsyncStorage.setItem).toHaveBeenCalledWith(
+        "opencode.recentModels.v1",
+        JSON.stringify([
+          { providerID: "openai", modelID: "gpt-4" },
+          { providerID: "anthropic", modelID: "claude-3" },
+        ])
+      )
+    })
+
+    it("caps list at 5 models", async () => {
+      const existing = [
+        { providerID: "p1", modelID: "m1" },
+        { providerID: "p2", modelID: "m2" },
+        { providerID: "p3", modelID: "m3" },
+        { providerID: "p4", modelID: "m4" },
+        { providerID: "p5", modelID: "m5" },
+      ]
+      mockAsyncStorage.getItem.mockResolvedValue(JSON.stringify(existing))
+
+      const model = { providerID: "p6", modelID: "m6" }
+      await saveRecentModel(model)
+
+      expect(mockAsyncStorage.setItem).toHaveBeenCalledWith(
+        "opencode.recentModels.v1",
+        JSON.stringify([
+          { providerID: "p6", modelID: "m6" },
+          { providerID: "p1", modelID: "m1" },
+          { providerID: "p2", modelID: "m2" },
+          { providerID: "p3", modelID: "m3" },
+          { providerID: "p4", modelID: "m4" },
+        ])
+      )
     })
   })
 })
