@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -301,20 +302,31 @@ const MessageRow = React.memo(function MessageRow({
 
   const timestamp = message.time?.created ? formatTimestamp(message.time.created) : null
 
+  const handleLongPress = useCallback(() => {
+    const fullText = segments
+      .map((s) => (s.type === "text" ? s.text : ""))
+      .join("\n")
+      .trim()
+    if (fullText) {
+      void Clipboard.setStringAsync(fullText)
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    }
+  }, [segments])
+
   if (isUser) {
     const text = segments.map((s) => (s.type === "text" ? s.text : "")).join("\n").trim()
     return (
-      <View style={styles.userRow}>
+      <Pressable style={styles.userRow} onLongPress={handleLongPress}>
         <View style={styles.userBubble}>
           <Text style={styles.userBubbleText}>{text}</Text>
         </View>
         {timestamp && <Text style={styles.timestampRight}>{timestamp}</Text>}
-      </View>
+      </Pressable>
     )
   }
 
   return (
-    <View style={styles.assistantRow}>
+    <Pressable style={styles.assistantRow} onLongPress={handleLongPress}>
       {segments.map((seg, i) => {
         if (seg.type === "text") {
           return (
@@ -326,7 +338,7 @@ const MessageRow = React.memo(function MessageRow({
         return <ToolCallGroup key={i} tools={seg.tools} />
       })}
       {timestamp && <Text style={styles.timestampLeft}>{timestamp}</Text>}
-    </View>
+    </Pressable>
   )
 })
 
@@ -508,6 +520,9 @@ export default function SessionDetailScreen() {
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false)
   const [isComposerFocused, setIsComposerFocused] = useState(false)
   const flatListRef = useRef<FlashListRef<Message>>(null)
+  const inputRef = useRef<TextInput>(null)
+  const messageCountAtScrollRef = useRef(0)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     if (sessionId) {
@@ -530,6 +545,23 @@ export default function SessionDetailScreen() {
       closeEventSource()
     }
   }, [])
+
+  // Auto-focus composer when arriving at an empty new session
+  useEffect(() => {
+    if (!isLoading && messages.length === 0) {
+      inputRef.current?.focus()
+    }
+  }, [isLoading, messages.length])
+
+  // Track unread messages when scrolled up
+  useEffect(() => {
+    if (!isAtBottom) {
+      setUnreadCount(messages.length - messageCountAtScrollRef.current)
+    } else {
+      setUnreadCount(0)
+      messageCountAtScrollRef.current = messages.length
+    }
+  }, [messages.length, isAtBottom])
 
   const handleSend = () => {
     if (!inputText.trim() || !sessionId || isAgentWorking) {
@@ -568,11 +600,11 @@ export default function SessionDetailScreen() {
     >
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerLeft}>
-          <PressableScale style={styles.headerButton} onPress={() => navigation.goBack()} accessibilityLabel="Go back" accessibilityRole="button">
+          <PressableScale style={styles.headerButton} onPress={() => { Keyboard.dismiss(); navigation.goBack() }} accessibilityLabel="Go back" accessibilityRole="button">
             <Ionicons name="chevron-back" size={22} color={colors.text.base} />
           </PressableScale>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {currentSession?.title ?? "Session"}
+            {currentSession?.title || "New session"}
           </Text>
         </View>
         <View style={styles.headerRight}>
@@ -681,17 +713,31 @@ export default function SessionDetailScreen() {
               style={styles.invertedList}
               onScroll={(event) => {
                 const offsetY = event.nativeEvent.contentOffset.y
+                const wasAtBottom = isAtBottom
+                const nowAtBottom = offsetY < 32
                 // In an inverted list, offset 0 = bottom (newest messages)
-                setIsAtBottom(offsetY < 32)
+                if (!wasAtBottom && nowAtBottom) {
+                  setUnreadCount(0)
+                  messageCountAtScrollRef.current = messages.length
+                } else if (wasAtBottom && !nowAtBottom) {
+                  messageCountAtScrollRef.current = messages.length
+                }
+                setIsAtBottom(nowAtBottom)
               }}
             />
 
             {!isAtBottom ? (
               <Pressable
                 style={styles.jumpToLatest}
-                onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+                onPress={() => {
+                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
+                  setUnreadCount(0)
+                  messageCountAtScrollRef.current = messages.length
+                }}
               >
-                <Text style={styles.jumpToLatestText}>Jump to latest</Text>
+                <Text style={styles.jumpToLatestText}>
+                  {unreadCount > 0 ? `↓ ${unreadCount} new` : "Jump to latest"}
+                </Text>
               </Pressable>
             ) : null}
           </>
@@ -702,8 +748,14 @@ export default function SessionDetailScreen() {
 
       {sessionId && (
         <View style={styles.composer}>
+          {isComposerFocused && !inputText && currentSession?.title ? (
+            <Text style={styles.composerSessionLabel} numberOfLines={1}>
+              Session: {currentSession.title}
+            </Text>
+          ) : null}
           <View style={[styles.composerCard, isComposerFocused && styles.composerCardFocused]}>
             <TextInput
+              ref={inputRef}
               style={styles.composerInput}
               value={inputText}
               onChangeText={setInputText}
@@ -729,6 +781,9 @@ export default function SessionDetailScreen() {
                 </Text>
                 <Ionicons name="chevron-down" size={10} color={palette.smoke[7]} />
               </PressableScale>
+              {messages.length === 0 && (
+                <Text style={styles.composerHint}>Tip: Use the send button</Text>
+              )}
               <View style={{ flex: 1 }} />
               <PressableScale
                 style={[
@@ -1022,6 +1077,17 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.3,
+  },
+  composerSessionLabel: {
+    fontSize: 11,
+    color: palette.smoke[6],
+    paddingHorizontal: 14,
+    marginBottom: 2,
+  },
+  composerHint: {
+    fontSize: 11,
+    color: palette.smoke[5],
+    marginLeft: 4,
   },
   // --- Modal ---
   modalBackdrop: {

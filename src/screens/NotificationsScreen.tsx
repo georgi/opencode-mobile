@@ -19,6 +19,8 @@ import * as Haptics from "expo-haptics"
 export default function NotificationsScreen() {
     const navigation =
         useNavigation<NativeStackNavigationProp<ProjectsStackParamList>>()
+    const sessions = useSessionStore((state) => state.sessions)
+    const setSession = useSessionStore((state) => state.setSession)
     const pendingPermissions = useSessionStore((state) => state.pendingPermissions)
     const fetchPermissions = useSessionStore((state) => state.fetchPermissions)
     const respondToPermission = useSessionStore((state) => state.respondToPermission)
@@ -127,11 +129,13 @@ export default function NotificationsScreen() {
                             </PressableScale>
                         </View>
                         <PressableScale
-                            onPress={() =>
+                            onPress={() => {
+                                const found = sessions.find((s) => s.id === permission.sessionID)
+                                if (found) setSession(found)
                                 navigation.navigate("SessionDetail", {
                                     sessionId: permission.sessionID,
                                 })
-                            }
+                            }}
                         >
                             <Text style={styles.openSessionText}>Open Session</Text>
                         </PressableScale>

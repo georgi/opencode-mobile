@@ -102,6 +102,7 @@ export default function SettingsScreen() {
   const [focusedInput, setFocusedInput] = useState<string | null>(null)
 
   const scanAbortRef = useRef<AbortController | null>(null)
+  const directoryInputRef = useRef<TextInput>(null)
 
   const addDiscovered = (server: DiscoveredServer) => {
     setDiscovered((prev) => {
@@ -271,6 +272,7 @@ export default function SettingsScreen() {
                 setDirectory("")
                 setBasicAuth("")
                 setEditingServerId(undefined)
+                setTimeout(() => directoryInputRef.current?.focus(), 100)
               }}
             >
               <View style={{ flex: 1 }}>
@@ -313,6 +315,7 @@ export default function SettingsScreen() {
         />
         {baseUrlError ? <Text style={styles.baseUrlError}>{baseUrlError}</Text> : null}
         <TextInput
+          ref={directoryInputRef}
           style={[styles.input, focusedInput === "directory" && styles.inputFocused]}
           value={directory}
           onChangeText={setDirectory}

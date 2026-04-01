@@ -50,14 +50,23 @@ export default function SessionsListScreen() {
   const [isCreating, setIsCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [sortMode, setSortMode] = useState<"recent" | "az">("recent")
 
   const filteredSessions = useMemo(() => {
-    if (!searchQuery.trim()) return sessions
-    const query = searchQuery.toLowerCase()
-    return sessions.filter((s) =>
-      (s.title || "Untitled session").toLowerCase().includes(query)
-    )
-  }, [sessions, searchQuery])
+    let result = sessions
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter((s) =>
+        (s.title || "Untitled session").toLowerCase().includes(query)
+      )
+    }
+    if (sortMode === "az") {
+      result = [...result].sort((a, b) =>
+        (a.title || "Untitled session").localeCompare(b.title || "Untitled session")
+      )
+    }
+    return result
+  }, [sessions, searchQuery, sortMode])
 
   useEffect(() => {
     if (!currentProject) {
@@ -97,6 +106,27 @@ export default function SessionsListScreen() {
 
     setSession(selected)
     navigation.navigate("SessionDetail", { sessionId: selected.id })
+  }
+
+  const handleRenameSession = (session: Session) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    Alert.prompt(
+      "Rename session",
+      undefined,
+      (newTitle) => {
+        if (newTitle?.trim()) {
+          const updated = { ...session, title: newTitle.trim() }
+          // Optimistic local update
+          useSessionStore.setState((state) => ({
+            sessions: state.sessions.map((s) => (s.id === session.id ? updated : s)),
+            currentSession:
+              state.currentSession?.id === session.id ? updated : state.currentSession,
+          }))
+        }
+      },
+      "plain-text",
+      session.title || ""
+    )
   }
 
   const handleDeleteSession = (session: Session, swipeableRef?: Swipeable | null) => {
@@ -146,25 +176,36 @@ export default function SessionsListScreen() {
       <ErrorBanner />
 
       {sessions.length > 0 && (
-        <View style={[styles.searchContainer, isSearchFocused && styles.searchContainerFocused]}>
-          <Ionicons name="search" size={16} color={palette.smoke[6]} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setIsSearchFocused(false)}
-            placeholder="Search sessions..."
-            placeholderTextColor={palette.smoke[6]}
-            autoCapitalize="none"
-            autoCorrect={false}
-            accessibilityLabel="Search sessions"
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color={palette.smoke[6]} />
-            </Pressable>
-          )}
+        <View style={styles.searchRow}>
+          <View style={[styles.searchContainer, isSearchFocused && styles.searchContainerFocused, { flex: 1 }]}>
+            <Ionicons name="search" size={16} color={palette.smoke[6]} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              placeholder="Search sessions..."
+              placeholderTextColor={palette.smoke[6]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="Search sessions"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                <Ionicons name="close-circle" size={16} color={palette.smoke[6]} />
+              </Pressable>
+            )}
+          </View>
+          <PressableScale
+            style={styles.sortChip}
+            onPress={() => setSortMode((m) => (m === "recent" ? "az" : "recent"))}
+            accessibilityLabel="Toggle sort order"
+          >
+            <Text style={styles.sortChipText}>
+              {sortMode === "recent" ? "Recent \u2193" : "A-Z \u2193"}
+            </Text>
+          </PressableScale>
         </View>
       )}
 
@@ -212,6 +253,7 @@ export default function SessionsListScreen() {
             >
               <PressableScale
                 onPress={() => handleSelectSession(item.id)}
+                onLongPress={() => handleRenameSession(item)}
                 style={[styles.sessionItem, isActive && styles.sessionItemActive]}
                 accessibilityLabel={item.title || "Untitled session"}
                 accessibilityRole="button"
@@ -277,12 +319,30 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   // --- Search ---
-  searchContainer: {
+  searchRow: {
     flexDirection: "row",
     alignItems: "center",
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 4,
+    gap: 8,
+  },
+  sortChip: {
+    paddingHorizontal: 10,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: palette.smoke[2],
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sortChipText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: palette.smoke[9],
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
     height: 40,
     borderRadius: 10,
