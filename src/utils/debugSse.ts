@@ -7,6 +7,7 @@ type DebugSseOptions = {
   headers?: Record<string, string>
   body?: string
   debug?: boolean
+  maxBufferSize?: number
 }
 
 type ListenerMap = Record<string, EventHandler[]>
@@ -19,6 +20,7 @@ export class DebugSse {
   private headers: Record<string, string>
   private body?: string
   private debug: boolean
+  private maxBufferSize: number
   private xhr: XMLHttpRequest | null = null
   private listeners: ListenerMap = { open: [], message: [], error: [], close: [] }
   private lastIndexProcessed = 0
@@ -32,6 +34,7 @@ export class DebugSse {
     this.headers = options.headers ?? {}
     this.body = options.body
     this.debug = options.debug ?? false
+    this.maxBufferSize = options.maxBufferSize ?? 2 * 1024 * 1024 // 2MB default
     this.open()
   }
 
@@ -52,6 +55,21 @@ export class DebugSse {
       this.xhr = null
     }
     this.dispatch("close", { type: "close" })
+  }
+
+  /**
+   * Reconnect to release the XHR responseText buffer.
+   * XHR accumulates the entire response in memory; this is the only
+   * way to free it without switching transport layers.
+   */
+  private reconnect() {
+    this.log("🧪 SSE reconnecting to release buffer", { bufferSize: this.lastIndexProcessed })
+    if (this.xhr) {
+      this.xhr.abort()
+      this.xhr = null
+    }
+    this.lastIndexProcessed = 0
+    this.open()
   }
 
   private log(...args: unknown[]) {
@@ -143,6 +161,12 @@ export class DebugSse {
       }
       if (data.endsWith("\n")) data = data.slice(0, -1)
       this.dispatch("message", { type: eventName, data })
+    }
+
+    // Reconnect to free the XHR responseText buffer when it grows too large.
+    // The caller's "open" handler should re-fetch current state to cover the gap.
+    if (this.lastIndexProcessed > this.maxBufferSize && !this.isClosed) {
+      this.reconnect()
     }
   }
 }

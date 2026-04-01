@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { palette } from "../constants/theme"
+import { ErrorBanner } from "../components/ErrorBanner"
 
 function relativeTime(timestamp: number): string {
   const now = Date.now()
@@ -39,17 +40,8 @@ export default function SessionsListScreen() {
   const createSession = useSessionStore((state) => state.createSession)
   const fetchSessions = useSessionStore((state) => state.fetchSessions)
   const setSession = useSessionStore((state) => state.setSession)
-  const lastError = useSessionStore((state) => state.lastError)
-  const clearError = useSessionStore((state) => state.clearError)
   const [refreshing, setRefreshing] = useState(false)
-  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    if (!lastError) return
-    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
-    errorTimerRef.current = setTimeout(() => clearError(), 5000)
-    return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }
-  }, [lastError])
+  const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
     if (!currentProject) {
@@ -66,12 +58,18 @@ export default function SessionsListScreen() {
   }, [fetchSessions])
 
   const handleCreate = async () => {
-    const sessionDirectory =
-      currentProject?.sandboxes?.find((sandbox) => sandbox !== currentProject?.worktree) ??
-      currentProject?.worktree
-    const session = await createSession({ directory: sessionDirectory })
-    if (session?.id) {
-      navigation.navigate("SessionDetail", { sessionId: session.id })
+    if (isCreating) return
+    setIsCreating(true)
+    try {
+      const sessionDirectory =
+        currentProject?.sandboxes?.find((sandbox) => sandbox !== currentProject?.worktree) ??
+        currentProject?.worktree
+      const session = await createSession({ directory: sessionDirectory })
+      if (session?.id) {
+        navigation.navigate("SessionDetail", { sessionId: session.id })
+      }
+    } finally {
+      setIsCreating(false)
     }
   }
 
@@ -104,11 +102,7 @@ export default function SessionsListScreen() {
         </View>
       </View>
 
-      {lastError ? (
-        <Pressable onPress={clearError} style={styles.errorBanner}>
-          <Text style={styles.errorText}>{lastError}</Text>
-        </Pressable>
-      ) : null}
+      <ErrorBanner />
 
       {!currentProject ? (
         <View style={styles.emptyState}>
@@ -118,13 +112,12 @@ export default function SessionsListScreen() {
         <View style={styles.emptyState}>
           <Ionicons name="chatbubbles-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
           <Text style={styles.emptyTitle}>No sessions yet</Text>
-          <Text style={styles.emptySubtitle}>Start your first session</Text>
+          <Text style={styles.emptySubtitle}>Tap + to start your first conversation.</Text>
         </View>
       ) : (
         <FlashList
           data={sessions}
           keyExtractor={(session: Session) => session.id}
-          estimatedItemSize={56}
           contentContainerStyle={styles.sessionList as never}
           refreshControl={
             <RefreshControl
@@ -157,8 +150,9 @@ export default function SessionsListScreen() {
 
       {/* FAB */}
       <Pressable
-        style={[styles.fab, { bottom: 20 + insets.bottom }]}
+        style={[styles.fab, { bottom: 20 + insets.bottom }, isCreating && { opacity: 0.5 }]}
         onPress={() => void handleCreate()}
+        disabled={isCreating}
       >
         <Ionicons name="add" size={28} color={palette.smoke[1]} />
       </Pressable>
@@ -197,16 +191,6 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   // --- Content ---
-  errorBanner: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: palette.ember[2],
-  },
-  errorText: {
-    color: palette.ember[9],
-    fontSize: 13,
-    textAlign: "center",
-  },
   emptyState: {
     flex: 1,
     justifyContent: "center",

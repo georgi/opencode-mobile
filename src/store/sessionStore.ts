@@ -57,6 +57,7 @@ export type SessionState = {
   pendingPermissions: PermissionRequest[]
   isOffline: boolean
   lastError?: string
+  errorSeq: number
   isAgentWorking: boolean
 
   // Debug: Event counter
@@ -66,6 +67,8 @@ export type SessionState = {
   // EventSource connection
   eventSource?: any
   eventSessionId?: string
+  isEventSourceConnected: boolean
+  eventSourceReconnectTimer?: ReturnType<typeof setTimeout>
 }
 
 export const initialSessionState: SessionState = {
@@ -80,6 +83,7 @@ export const initialSessionState: SessionState = {
   projects: [],
   pendingPermissions: [],
   isOffline: false,
+  errorSeq: 0,
   isAgentWorking: false,
 
   // Debug: Event counter
@@ -89,6 +93,8 @@ export const initialSessionState: SessionState = {
   // EventSource connection
   eventSource: undefined,
   eventSessionId: undefined,
+  isEventSourceConnected: false,
+  eventSourceReconnectTimer: undefined,
 }
 
 type SessionActions = {
@@ -161,14 +167,30 @@ const getMessageTimestamp = (message: Message) => message.time?.created ?? 0
 const sortMessages = (messages: Message[]) =>
   [...messages].sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b))
 
+const insertSorted = (messages: Message[], message: Message) => {
+  const ts = getMessageTimestamp(message)
+  // Binary search for insertion point (oldest-first order)
+  let lo = 0
+  let hi = messages.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (getMessageTimestamp(messages[mid]) < ts) lo = mid + 1
+    else hi = mid
+  }
+  const next = [...messages]
+  next.splice(lo, 0, message)
+  return next
+}
+
 const upsertMessage = (messages: Message[], message: Message) => {
   const index = messages.findIndex((item) => item.id === message.id)
   if (index === -1) {
-    return sortMessages([message, ...messages])
+    return insertSorted(messages, message)
   }
+  // In-place update: no re-sort needed since timestamp doesn't change
   const next = [...messages]
   next[index] = message
-  return sortMessages(next)
+  return next
 }
 
 const upsertPart = (parts: Part[], incoming: Part, delta?: string) => {
@@ -191,6 +213,20 @@ const upsertPart = (parts: Part[], incoming: Part, delta?: string) => {
 
   next[index] = incoming
   return next
+}
+
+/**
+ * Returns a new messageParts record with one message's parts replaced.
+ * Bails out (returns original) if the parts array reference is unchanged,
+ * avoiding unnecessary object allocation on the hot path.
+ */
+const withUpdatedParts = (
+  messageParts: Record<string, Part[]>,
+  messageID: string,
+  updatedParts: Part[]
+): Record<string, Part[]> => {
+  if (messageParts[messageID] === updatedParts) return messageParts
+  return { ...messageParts, [messageID]: updatedParts }
 }
 
 export const useSessionStore = create<SessionState & SessionActions>((set, get) => {
@@ -234,8 +270,8 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       case "message.part.updated":
         return event.properties.part.sessionID === sessionId
 
-      case "message.part.delta":
-        return event.properties.sessionID === sessionId
+      case "message.part.delta" as string:
+        return (event as any).properties.sessionID === sessionId
 
       case "message.part.removed": {
         const message = get().messages.find((item) => item.id === event.properties.messageID)
@@ -311,17 +347,15 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         set((state) => {
           const messageID = part.messageID
           const parts = state.messageParts[messageID] ?? []
-          return {
-            messageParts: {
-              ...state.messageParts,
-              [messageID]: upsertPart(parts, part, delta),
-            },
-          }
+          const updatedParts = upsertPart(parts, part, delta)
+          const nextMessageParts = withUpdatedParts(state.messageParts, messageID, updatedParts)
+          if (nextMessageParts === state.messageParts) return state
+          return { messageParts: nextMessageParts }
         })
         break
       }
-      case "message.part.delta": {
-        const { messageID, partID, delta, field } = event.properties
+      case "message.part.delta" as string: {
+        const { messageID, partID, delta, field } = (event as any).properties
         if (delta && field === "text") {
           set((state) => {
             const parts = state.messageParts[messageID] ?? []
@@ -332,23 +366,19 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
             const textPart = part as TextPart
             const next = [...parts]
             next[index] = { ...textPart, text: `${textPart.text ?? ""}${delta}` }
-            return {
-              messageParts: { ...state.messageParts, [messageID]: next },
-            }
+            return { messageParts: withUpdatedParts(state.messageParts, messageID, next) }
           })
         }
         break
       }
       case "message.part.removed": {
         const { messageID, partID } = event.properties
-        set((state) => ({
-          messageParts: {
-            ...state.messageParts,
-            [messageID]: (state.messageParts[messageID] ?? []).filter(
-              (part) => part.id !== partID
-            ),
-          },
-        }))
+        set((state) => {
+          const parts = state.messageParts[messageID] ?? []
+          const filtered = parts.filter((part) => part.id !== partID)
+          if (filtered.length === parts.length) return state
+          return { messageParts: withUpdatedParts(state.messageParts, messageID, filtered) }
+        })
         break
       }
       case "permission.asked": {
@@ -377,8 +407,8 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       }
       case "session.error": {
         const error = event.properties.error
-        const message = error?.data?.message ?? error?.name ?? "Unknown error"
-        set({ lastError: message, isAgentWorking: false })
+        const message = String(error?.data?.message ?? error?.name ?? "Unknown error")
+        set((state) => ({ lastError: message, errorSeq: state.errorSeq + 1, isAgentWorking: false }))
         break
       }
 
@@ -552,13 +582,17 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
     setAgentWorking: (isAgentWorking) => set({ isAgentWorking }),
     setPendingPermissions: (permissions) => set({ pendingPermissions: permissions }),
     setOffline: (isOffline) => set({ isOffline }),
-    setError: (error) => set({ lastError: error }),
+    setError: (error) => set((state) => ({ lastError: error, errorSeq: state.errorSeq + 1 })),
     clearError: () => set({ lastError: undefined }),
     reset: () => {
-      // Close EventSource if open
+      // Close EventSource and clear reconnect timer
       const es = get().eventSource
       if (es) {
         es.close()
+      }
+      const timer = get().eventSourceReconnectTimer
+      if (timer) {
+        clearTimeout(timer)
       }
 
       set({
@@ -570,6 +604,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         currentSession: undefined,
         diffsError: undefined,
         eventSource: undefined,
+        eventSourceReconnectTimer: undefined,
       })
     },
     initializeClient: (server) => {
@@ -691,34 +726,28 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       }
 
       set({ isAgentWorking: true })
-      const directory = getSessionDirectory()
-      const selectedModel = get().selectedModel
 
-      const parts: TextPartInput[] = [{ type: "text", text }]
-      const result = await client.session.prompt({
-        sessionID: sessionId,
-        directory,
-        model: selectedModel,
-        parts,
-      })
+      try {
+        const directory = getSessionDirectory()
+        const selectedModel = get().selectedModel
 
-      const response = resolveData(result)
-      if (!response) {
-        set({ lastError: "ERR SERVER UNAVAILABLE", isAgentWorking: false })
-        return
-      }
+        const parts: TextPartInput[] = [{ type: "text", text }]
+        const result = await client.session.prompt({
+          sessionID: sessionId,
+          directory,
+          model: selectedModel,
+          parts,
+        })
 
-      const messagesResult = await client.session.messages({ sessionID: sessionId, directory })
-      const messagesData = resolveData(messagesResult)
-
-      if (messagesData) {
-        const messages = messagesData.map((item) => item.info)
-        const messageParts: Record<string, Part[]> = {}
-        for (const item of messagesData) {
-          messageParts[item.info.id] = item.parts
+        const response = resolveData(result)
+        if (!response) {
+          set({ lastError: "ERR SERVER UNAVAILABLE", isAgentWorking: false })
+          return
         }
-        const hasAssistantMessage = messagesData.some(item => item.info.role === "assistant")
-        set({ messages: sortMessages(messages), messageParts, isAgentWorking: !hasAssistantMessage })
+
+        // SSE handles message updates — no re-fetch needed
+      } catch (error) {
+        set({ lastError: error instanceof Error ? error.message : "ERR SEND FAILED", isAgentWorking: false })
       }
     },
     fetchMessages: async (sessionId) => {
@@ -934,10 +963,14 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return
       }
 
-      // Close existing EventSource if any
+      // Close existing EventSource and clear any pending reconnect
       const existingSource = get().eventSource
       if (existingSource) {
         existingSource.close()
+      }
+      const existingTimer = get().eventSourceReconnectTimer
+      if (existingTimer) {
+        clearTimeout(existingTimer)
       }
 
       let serverUrl: URL
@@ -960,47 +993,97 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         headers.Authorization = `Basic ${basicAuth}`
       }
 
-      // Create new EventSource connection
-      let es: DebugSse
-      try {
-        es = new DebugSse(serverUrl.toString(), {
-          timeout: 0,
-          debug: true,
-          headers,
+      const sseUrl = serverUrl.toString()
+      let reconnectAttempts = 0
+      const MAX_RECONNECT_DELAY = 30000
+
+      const connect = () => {
+        // Create new EventSource connection
+        let es: DebugSse
+        try {
+          es = new DebugSse(sseUrl, {
+            timeout: 0,
+            debug: true,
+            headers,
+          })
+        } catch (error) {
+          console.error("Failed to create DebugSse", error)
+          return
+        }
+
+        // Store reference to EventSource + session filter
+        set({ eventSource: es, eventSessionId: sessionId })
+
+        es.addEventListener("open", () => {
+          reconnectAttempts = 0
+          set({ isEventSourceConnected: true })
+
+          // Re-fetch messages on reconnect to catch anything missed
+          const currentSessionId = get().eventSessionId ?? get().currentSession?.id
+          if (currentSessionId) {
+            void get().fetchMessages(currentSessionId)
+          }
         })
-      } catch (error) {
-        console.error("Failed to create DebugSse", error)
-        return
+
+        es.addEventListener("message", (event) => {
+          try {
+            if (!event.data) return
+            const data = JSON.parse(event.data)
+            const payload = "payload" in data ? data.payload : data
+            const eventDirectory = "directory" in data ? data.directory : undefined
+            handleEvent(payload as Event, eventDirectory)
+          } catch (error) {
+            console.error("Failed to parse event:", error, event.data)
+          }
+        })
+
+        const scheduleReconnect = () => {
+          // Don't reconnect if explicitly closed
+          if (get().eventSource !== es) return
+
+          set({ isEventSourceConnected: false, eventSource: undefined })
+
+          reconnectAttempts++
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), MAX_RECONNECT_DELAY)
+          console.log(`SSE reconnecting in ${delay}ms (attempt ${reconnectAttempts})`)
+
+          const timer = setTimeout(() => {
+            // Only reconnect if we haven't been replaced or closed
+            if (!get().eventSource) {
+              connect()
+            }
+          }, delay)
+          set({ eventSourceReconnectTimer: timer })
+        }
+
+        es.addEventListener("error", (event) => {
+          console.error("EventSource error:", event)
+          scheduleReconnect()
+        })
+
+        es.addEventListener("close", () => {
+          scheduleReconnect()
+        })
       }
 
-      // Store reference to EventSource + session filter
-      set({ eventSource: es, eventSessionId: sessionId })
-
-      es.addEventListener("message", (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          const payload = "payload" in data ? data.payload : data
-          const eventDirectory = "directory" in data ? data.directory : undefined
-          handleEvent(payload as Event, eventDirectory)
-        } catch (error) {
-          console.error("Failed to parse event:", error, event.data)
-        }
-      })
-
-      es.addEventListener("error", (event) => {
-        console.error("EventSource error:", event)
-        if (event.type === "exception") {
-          console.error("Exception:", event.error)
-        }
-      })
+      connect()
     },
 
     closeEventSource: () => {
       const es = get().eventSource
       if (es) {
         es.close()
-        set({ eventSource: undefined, eventSessionId: undefined })
       }
+      const timer = get().eventSourceReconnectTimer
+      if (timer) {
+        clearTimeout(timer)
+      }
+      set({
+        eventSource: undefined,
+        eventSessionId: undefined,
+        isEventSourceConnected: false,
+        eventSourceReconnectTimer: undefined,
+      })
     },
   }
 })

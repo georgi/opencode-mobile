@@ -22,6 +22,7 @@ type DiscoveredServer = {
 }
 
 const SCAN_PORTS = [4096, 4097, 4098, 4099, 4100]
+const SCAN_CONCURRENCY = 20
 
 async function scanSubnet(
   onFound: (server: DiscoveredServer) => void,
@@ -31,12 +32,11 @@ async function scanSubnet(
   if (!ip) return
   const subnet = ip.split(".").slice(0, 3).join(".")
 
-  const checks: Promise<void>[] = []
+  const tasks: (() => Promise<void>)[] = []
   for (let i = 1; i <= 254; i++) {
-    if (signal.aborted) break
     const host = `${subnet}.${i}`
     for (const port of SCAN_PORTS) {
-      checks.push(
+      tasks.push(() =>
         fetch(`http://${host}:${port}/global/health`, { signal, method: "GET" })
           .then((res) => res.json())
           .then((data) => {
@@ -53,7 +53,18 @@ async function scanSubnet(
       )
     }
   }
-  await Promise.all(checks)
+
+  let index = 0
+  async function next(): Promise<void> {
+    while (index < tasks.length) {
+      if (signal.aborted) return
+      const task = tasks[index++]
+      await task()
+    }
+  }
+
+  const workers = Array.from({ length: SCAN_CONCURRENCY }, () => next())
+  await Promise.all(workers)
 }
 
 const defaultBaseUrl = "https://api.opencode.ai"
@@ -84,6 +95,7 @@ export default function SettingsScreen() {
 
   const [label, setLabel] = useState("")
   const [baseUrl, setBaseUrl] = useState(defaultBaseUrl)
+  const [baseUrlError, setBaseUrlError] = useState("")
   const [directory, setDirectory] = useState("")
   const [basicAuth, setBasicAuth] = useState("")
 
@@ -120,11 +132,24 @@ export default function SettingsScreen() {
       return
     }
 
+    const trimmedUrl = baseUrl.trim()
+    try {
+      const parsed = new URL(trimmedUrl)
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        setBaseUrlError("URL must start with http:// or https://")
+        return
+      }
+    } catch {
+      setBaseUrlError("Invalid URL")
+      return
+    }
+    setBaseUrlError("")
+
     const id = editingServerId ?? uuidv4()
     const server: ServerConfig = {
       id,
       label: label.trim(),
-      baseUrl: baseUrl.trim() as `${string}://${string}`,
+      baseUrl: trimmedUrl as `${string}://${string}`,
       directory: directory.trim(),
       basicAuth,
     }
@@ -139,91 +164,105 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>Settings</Text>
-
-      <Text style={styles.label}>Status</Text>
-      <Text style={styles.text}>{isOffline ? "Offline" : "Online"}</Text>
-
-      <Text style={styles.label}>Current Server</Text>
-      <Text style={styles.text}>{currentServer?.label ?? "No server selected"}</Text>
-
-      <Text style={styles.label}>Saved Servers</Text>
-      {servers.length === 0 ? (
-        <Text style={styles.text}>No servers saved</Text>
-      ) : (
-        <View style={styles.serverList}>
-          {servers.map((server) => {
-            const isActive = server.id === currentServerId
-            return (
-              <View key={server.id} style={styles.serverRow}>
-                <Pressable
-                  onPress={() => void selectServer(server.id)}
-                  style={[styles.serverCard, isActive && styles.serverCardActive]}
-                >
-                  <View style={styles.serverLabelRow}>
-                    {isActive && <View style={styles.activeDot} />}
-                    <Text style={styles.serverName}>{server.label}</Text>
-                  </View>
-                  <Text style={styles.serverMeta}>{server.baseUrl}</Text>
-                  <Text style={styles.serverMeta}>{server.directory}</Text>
-                </Pressable>
-
-                <View style={styles.serverActions}>
-                  <Pressable
-                    onPress={() => {
-                      setEditingServerId(server.id)
-                      setLabel(server.label)
-                      setBaseUrl(server.baseUrl)
-                      setDirectory(server.directory)
-                      setBasicAuth(server.basicAuth)
-                    }}
-                  >
-                    <Text style={styles.editText}>Edit</Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      Alert.alert(
-                        "Remove server",
-                        `Remove ${server.label}?`,
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Remove",
-                            style: "destructive",
-                            onPress: () => void removeServer(server.id),
-                          },
-                        ]
-                      )
-                    }}
-                  >
-                    <Text style={styles.removeText}>Remove</Text>
-                  </Pressable>
-                </View>
-              </View>
-
-            )
-          })}
+      {/* Section 1: Connection */}
+      <Text style={styles.sectionLabel}>Connection</Text>
+      <View style={styles.card}>
+        <View style={styles.connectionRow}>
+          <View style={[styles.statusDot, isOffline ? styles.statusDotOffline : styles.statusDotOnline]} />
+          <Text style={styles.connectionStatus}>{isOffline ? "Offline" : "Online"}</Text>
         </View>
-      )}
+        {currentServer ? (
+          <View style={styles.connectionDetail}>
+            <Text style={styles.connectionServerName}>{currentServer.label}</Text>
+            <Text style={styles.connectionServerUrl}>{currentServer.baseUrl}</Text>
+          </View>
+        ) : (
+          <Text style={styles.connectionNoServer}>No server selected</Text>
+        )}
+      </View>
 
-      <View style={styles.scanHeader}>
-        <Text style={styles.label}>Discover on LAN</Text>
-        <Pressable onPress={startScan} disabled={isScanning} style={styles.scanButton}>
+      {/* Section 2: Saved Servers */}
+      <Text style={styles.sectionLabel}>Saved Servers</Text>
+      <View style={styles.card}>
+        {servers.length === 0 ? (
+          <View style={styles.emptyServers}>
+            <Ionicons name="server-outline" size={32} color={palette.smoke[5]} />
+            <Text style={styles.emptyServersText}>No servers saved yet</Text>
+          </View>
+        ) : (
+          <View style={styles.serverList}>
+            {servers.map((server) => {
+              const isActive = server.id === currentServerId
+              return (
+                <Pressable
+                  key={server.id}
+                  onPress={() => void selectServer(server.id)}
+                  style={[styles.serverItem, isActive && styles.serverItemActive]}
+                >
+                  <View style={styles.serverInfo}>
+                    <View style={styles.serverLabelRow}>
+                      {isActive && <View style={styles.activeDot} />}
+                      <Text style={styles.serverName}>{server.label}</Text>
+                    </View>
+                    <Text style={styles.serverMeta}>{server.baseUrl}</Text>
+                    <Text style={styles.serverMeta}>{server.directory}</Text>
+                  </View>
+                  <View style={styles.serverActions}>
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => {
+                        setEditingServerId(server.id)
+                        setLabel(server.label)
+                        setBaseUrl(server.baseUrl)
+                        setDirectory(server.directory)
+                        setBasicAuth(server.basicAuth)
+                      }}
+                    >
+                      <Ionicons name="pencil" size={18} color={palette.smoke[9]} />
+                    </Pressable>
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => {
+                        Alert.alert(
+                          "Remove server",
+                          `Remove ${server.label}?`,
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Remove",
+                              style: "destructive",
+                              onPress: () => void removeServer(server.id),
+                            },
+                          ]
+                        )
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={palette.ember[9]} />
+                    </Pressable>
+                  </View>
+                </Pressable>
+              )
+            })}
+          </View>
+        )}
+      </View>
+
+      {/* Section 3: Discover on LAN */}
+      <Text style={styles.sectionLabel}>Discover on LAN</Text>
+      <View style={styles.card}>
+        <Pressable onPress={startScan} disabled={isScanning} style={styles.scanRow}>
           {isScanning ? (
             <ActivityIndicator size="small" color={palette.smoke[7]} />
           ) : (
-            <Ionicons name="search" size={16} color={palette.smoke[7]} />
+            <Ionicons name="search" size={18} color={palette.smoke[7]} />
           )}
-          <Text style={styles.scanButtonText}>{isScanning ? "Scanning..." : "Scan"}</Text>
+          <Text style={styles.scanRowText}>{isScanning ? "Scanning..." : "Scan network"}</Text>
         </Pressable>
-      </View>
-      {discovered.length > 0 && (
-        <View style={styles.discoveredList}>
-          {discovered.map((server) => (
+        {discovered.length > 0 &&
+          discovered.map((server) => (
             <Pressable
               key={`${server.address}:${server.port}`}
-              style={styles.discoveredCard}
+              style={styles.discoveredRow}
               onPress={() => {
                 setLabel(server.name.replace("opencode-", "opencode "))
                 setBaseUrl(`http://${server.address}:${server.port}`)
@@ -238,54 +277,60 @@ export default function SettingsScreen() {
               </View>
               <Ionicons name="add-circle-outline" size={20} color={palette.smoke[7]} />
             </Pressable>
-          ))}
-        </View>
-      )}
-      {isScanning && discovered.length === 0 && (
-        <Text style={styles.scanHint}>Looking for OpenCode servers...</Text>
-      )}
+          ))
+        }
+        {isScanning && discovered.length === 0 && (
+          <Text style={styles.scanHint}>Looking for OpenCode servers...</Text>
+        )}
+      </View>
 
-      <Text style={styles.label}>{editingServerId ? "Update Server" : "Add Server"}</Text>
-      <TextInput
-        style={styles.input}
-        value={label}
-        onChangeText={setLabel}
-        placeholder="Label (e.g. Work)"
-        placeholderTextColor={palette.smoke[7]}
-      />
-      <TextInput
-        style={styles.input}
-        value={baseUrl}
-        onChangeText={setBaseUrl}
-        placeholder="Base URL"
-        placeholderTextColor={palette.smoke[7]}
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        value={directory}
-        onChangeText={setDirectory}
-        placeholder="Directory"
-        placeholderTextColor={palette.smoke[7]}
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        value={basicAuth}
-        onChangeText={setBasicAuth}
-        placeholder="Basic auth token"
-        placeholderTextColor={palette.smoke[7]}
-        autoCapitalize="none"
-        secureTextEntry
-      />
-
-      <Pressable
-        onPress={() => void handleSave()}
-        style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
-        disabled={!canSave}
-      >
-        <Text style={styles.saveText}>{editingServerId ? "Update Server" : "Save Server"}</Text>
-      </Pressable>
+      {/* Section 4: Add / Edit Server */}
+      <Text style={styles.sectionLabel}>{editingServerId ? "Edit Server" : "Add Server"}</Text>
+      <View style={styles.card}>
+        <TextInput
+          style={styles.input}
+          value={label}
+          onChangeText={setLabel}
+          placeholder="Label (e.g. Work)"
+          placeholderTextColor={palette.smoke[7]}
+        />
+        <TextInput
+          style={styles.input}
+          value={baseUrl}
+          onChangeText={(text) => {
+            setBaseUrl(text)
+            if (baseUrlError) setBaseUrlError("")
+          }}
+          placeholder="Base URL"
+          placeholderTextColor={palette.smoke[7]}
+          autoCapitalize="none"
+        />
+        {baseUrlError ? <Text style={styles.baseUrlError}>{baseUrlError}</Text> : null}
+        <TextInput
+          style={styles.input}
+          value={directory}
+          onChangeText={setDirectory}
+          placeholder="Directory"
+          placeholderTextColor={palette.smoke[7]}
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.input}
+          value={basicAuth}
+          onChangeText={setBasicAuth}
+          placeholder="Basic auth token"
+          placeholderTextColor={palette.smoke[7]}
+          autoCapitalize="none"
+          secureTextEntry
+        />
+        <Pressable
+          onPress={() => void handleSave()}
+          style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
+          disabled={!canSave}
+        >
+          <Text style={styles.saveText}>{editingServerId ? "Update Server" : "Save Server"}</Text>
+        </Pressable>
+      </View>
 
       {editingServerId ? (
         <Pressable
@@ -312,12 +357,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: colors.background.base,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: colors.text.base,
-  },
-  label: {
+  sectionLabel: {
     fontSize: 12,
     fontWeight: "500",
     marginTop: 12,
@@ -325,33 +365,78 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-  text: {
+  card: {
+    backgroundColor: palette.smoke[2],
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+  },
+  // --- Connection ---
+  connectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusDotOnline: {
+    backgroundColor: palette.apple[9],
+  },
+  statusDotOffline: {
+    backgroundColor: palette.ember[9],
+  },
+  connectionStatus: {
+    fontSize: 14,
+    fontWeight: "500",
     color: colors.text.base,
   },
-  input: {
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: palette.smoke[11],
-    backgroundColor: palette.smoke[2],
+  connectionDetail: {
+    gap: 2,
+  },
+  connectionServerName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text.base,
+  },
+  connectionServerUrl: {
+    fontSize: 12,
+    color: colors.text.weak,
+  },
+  connectionNoServer: {
+    fontSize: 13,
+    color: palette.smoke[6],
+  },
+  // --- Saved Servers ---
+  emptyServers: {
+    alignItems: "center",
+    paddingVertical: 16,
+    gap: 8,
+  },
+  emptyServersText: {
+    fontSize: 13,
+    color: palette.smoke[6],
   },
   serverList: {
     gap: 8,
   },
-  serverRow: {
+  serverItem: {
     flexDirection: "row",
-    gap: 8,
-    alignItems: "stretch",
-  },
-  serverCard: {
-    flex: 1,
+    alignItems: "center",
     padding: 12,
-    borderRadius: 12,
-    backgroundColor: palette.smoke[2],
-    gap: 2,
-  },
-  serverCardActive: {
+    borderRadius: 10,
     backgroundColor: palette.smoke[3],
+    borderLeftWidth: 3,
+    borderLeftColor: "transparent",
+  },
+  serverItemActive: {
+    borderLeftColor: palette.cobalt[9],
+  },
+  serverInfo: {
+    flex: 1,
+    gap: 2,
   },
   serverLabelRow: {
     flexDirection: "row",
@@ -362,10 +447,10 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: palette.smoke[9],
+    backgroundColor: palette.apple[9],
   },
   serverName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     color: colors.text.base,
   },
@@ -374,68 +459,28 @@ const styles = StyleSheet.create({
     color: colors.text.weak,
   },
   serverActions: {
-    justifyContent: "center",
+    flexDirection: "row",
+    gap: 16,
+    paddingLeft: 12,
+  },
+  // --- Discover ---
+  scanRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
+    paddingVertical: 4,
   },
-  editText: {
+  scanRowText: {
+    fontSize: 14,
     color: palette.smoke[9],
-    fontWeight: "600",
-  },
-  removeText: {
-    color: palette.ember[9],
-    fontWeight: "600",
-  },
-  saveButton: {
-    marginTop: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: palette.smoke[10],
-    alignItems: "center",
-  },
-  saveButtonDisabled: {
-    opacity: 0.5,
-  },
-  saveText: {
-    color: palette.smoke[1],
-    fontWeight: "600",
-  },
-  cancelButton: {
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  cancelText: {
-    color: palette.smoke[7],
-    fontWeight: "600",
-  },
-  scanHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 12,
-  },
-  scanButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: palette.smoke[2],
-  },
-  scanButtonText: {
-    fontSize: 13,
-    color: palette.smoke[7],
     fontWeight: "500",
   },
-  discoveredList: {
-    gap: 6,
-  },
-  discoveredCard: {
+  discoveredRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: palette.smoke[2],
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: palette.smoke[3],
     gap: 8,
   },
   discoveredName: {
@@ -453,6 +498,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: palette.smoke[6],
     textAlign: "center",
+    paddingVertical: 8,
+  },
+  // --- Add/Edit Server ---
+  input: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: palette.smoke[11],
+    backgroundColor: palette.smoke[3],
+  },
+  baseUrlError: {
+    color: palette.ember[9],
+    fontSize: 12,
+    marginTop: -6,
+  },
+  saveButton: {
     paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: palette.smoke[10],
+    alignItems: "center",
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveText: {
+    color: palette.smoke[1],
+    fontWeight: "600",
+  },
+  cancelButton: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  cancelText: {
+    color: palette.smoke[7],
+    fontWeight: "600",
   },
 })

@@ -21,6 +21,7 @@ export default function NotificationsScreen() {
     const fetchPermissions = useSessionStore((state) => state.fetchPermissions)
     const respondToPermission = useSessionStore((state) => state.respondToPermission)
     const [refreshing, setRefreshing] = useState(false)
+    const [respondingIds, setRespondingIds] = useState<Set<string>>(new Set())
 
     useEffect(() => {
         void fetchPermissions()
@@ -31,6 +32,20 @@ export default function NotificationsScreen() {
         await fetchPermissions()
         setRefreshing(false)
     }, [fetchPermissions])
+
+    const handleRespond = async (id: string, reply: "once" | "always" | "reject") => {
+        if (respondingIds.has(id)) return
+        setRespondingIds((prev) => new Set(prev).add(id))
+        try {
+            await respondToPermission(id, reply)
+        } finally {
+            setRespondingIds((prev) => {
+                const next = new Set(prev)
+                next.delete(id)
+                return next
+            })
+        }
+    }
 
     return (
         <ScrollView
@@ -68,6 +83,7 @@ export default function NotificationsScreen() {
                 <View style={styles.emptyState}>
                     <Ionicons name="checkmark-circle-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
                     <Text style={styles.emptyText}>No pending permissions</Text>
+                    <Text style={styles.emptyHint}>Check back when a session needs approval.</Text>
                 </View>
             ) : (
                 pendingPermissions.map((permission) => (
@@ -80,26 +96,23 @@ export default function NotificationsScreen() {
                         </Text>
                         <View style={styles.permissionActions}>
                             <Pressable
-                                style={styles.actionButton}
-                                onPress={() =>
-                                    void respondToPermission(permission.id, "once")
-                                }
+                                style={[styles.actionButton, respondingIds.has(permission.id) && { opacity: 0.5 }]}
+                                onPress={() => void handleRespond(permission.id, "once")}
+                                disabled={respondingIds.has(permission.id)}
                             >
                                 <Text style={styles.actionButtonText}>Once</Text>
                             </Pressable>
                             <Pressable
-                                style={styles.actionButton}
-                                onPress={() =>
-                                    void respondToPermission(permission.id, "always")
-                                }
+                                style={[styles.actionButton, respondingIds.has(permission.id) && { opacity: 0.5 }]}
+                                onPress={() => void handleRespond(permission.id, "always")}
+                                disabled={respondingIds.has(permission.id)}
                             >
                                 <Text style={styles.actionButtonText}>Always</Text>
                             </Pressable>
                             <Pressable
-                                style={styles.rejectButton}
-                                onPress={() =>
-                                    void respondToPermission(permission.id, "reject")
-                                }
+                                style={[styles.rejectButton, respondingIds.has(permission.id) && { opacity: 0.5 }]}
+                                onPress={() => void handleRespond(permission.id, "reject")}
+                                disabled={respondingIds.has(permission.id)}
                             >
                                 <Text style={styles.rejectButtonText}>Reject</Text>
                             </Pressable>
@@ -155,6 +168,11 @@ const styles = StyleSheet.create({
     emptyText: {
         color: palette.smoke[7],
         fontSize: 14,
+    },
+    emptyHint: {
+        color: palette.smoke[6],
+        fontSize: 13,
+        marginTop: 4,
     },
     permissionCard: {
         padding: 12,

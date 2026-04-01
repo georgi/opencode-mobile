@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useMemo } from "react"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import {
   View,
@@ -23,6 +23,74 @@ import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Message, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2/client"
 import { colors, palette } from "../constants/theme"
+import { ErrorBanner } from "../components/ErrorBanner"
+import * as Clipboard from "expo-clipboard"
+
+const emptyParts: Part[] = []
+
+// --- CodeBlock with copy button ---
+
+function extractTextFromNode(node: any): string {
+  if (typeof node === "string") return node
+  if (node?.content) return node.content
+  if (node?.children) {
+    return node.children.map(extractTextFromNode).join("")
+  }
+  return ""
+}
+
+function CodeBlockWithCopy({ node, styles: mdStyles }: { node: any; styles: any }) {
+  const [copied, setCopied] = React.useState(false)
+  const copiedTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const code = extractTextFromNode(node).replace(/\n$/, "")
+
+  React.useEffect(() => {
+    return () => { if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current) }
+  }, [])
+
+  const handleCopy = async () => {
+    await Clipboard.setStringAsync(code)
+    setCopied(true)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <View style={codeBlockStyles.wrapper}>
+      <Pressable style={codeBlockStyles.copyButton} onPress={() => void handleCopy()} hitSlop={8}>
+        <Ionicons name={copied ? "checkmark" : "copy-outline"} size={14} color={palette.smoke[7]} />
+      </Pressable>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <Text style={mdStyles.fence ?? mdStyles.code_block}>{code}</Text>
+      </ScrollView>
+    </View>
+  )
+}
+
+const codeBlockStyles = StyleSheet.create({
+  wrapper: {
+    position: "relative",
+    marginVertical: 4,
+  },
+  copyButton: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    zIndex: 1,
+    padding: 4,
+    borderRadius: 4,
+    backgroundColor: palette.smoke[3],
+  },
+})
+
+const markdownRules = {
+  fence: (node: any, _children: any, _parent: any, styles: any) => (
+    <CodeBlockWithCopy key={node.key} node={node} styles={styles} />
+  ),
+  code_block: (node: any, _children: any, _parent: any, styles: any) => (
+    <CodeBlockWithCopy key={node.key} node={node} styles={styles} />
+  ),
+}
 
 function formatTimestamp(timestamp: number): string {
   const date = new Date(timestamp)
@@ -80,7 +148,7 @@ const ThinkingIndicator = React.memo(function ThinkingIndicator() {
 
 // --- ToolCallRow ---
 
-function ToolCallRow({ tool, onPress }: { tool: ToolPart; onPress: () => void }) {
+const ToolCallRow = React.memo(function ToolCallRow({ tool, onPress }: { tool: ToolPart; onPress: () => void }) {
   const status = tool.state?.status
   const isError = status === "error"
   const isRunning = status === "running"
@@ -115,7 +183,7 @@ function ToolCallRow({ tool, onPress }: { tool: ToolPart; onPress: () => void })
       {isRunning && <ActivityIndicator size="small" color={palette.solaris[9]} style={{ marginLeft: 4 }} />}
     </Pressable>
   )
-}
+})
 
 // --- ToolCallGroup ---
 
@@ -183,13 +251,12 @@ const ToolCallGroup = React.memo(function ToolCallGroup({ tools }: { tools: Tool
 
 const MessageRow = React.memo(function MessageRow({
   message,
-  parts,
 }: {
   message: Message
-  parts: Part[]
 }) {
+  const parts = useSessionStore((state) => state.messageParts[message.id] ?? emptyParts)
   const isUser = message.role === "user"
-  const segments = groupParts(parts)
+  const segments = useMemo(() => groupParts(parts), [parts])
 
   if (isUser) {
     const text = segments.map((s) => (s.type === "text" ? s.text : "")).join("\n").trim()
@@ -207,7 +274,7 @@ const MessageRow = React.memo(function MessageRow({
       {segments.map((seg, i) => {
         if (seg.type === "text") {
           return (
-            <Markdown key={i} style={markdownStyles}>
+            <Markdown key={i} style={markdownStyles} rules={markdownRules}>
               {seg.text}
             </Markdown>
           )
@@ -217,6 +284,130 @@ const MessageRow = React.memo(function MessageRow({
     </View>
   )
 })
+
+// --- ModelPicker ---
+
+function ModelPicker({
+  visible,
+  onClose,
+}: {
+  visible: boolean
+  onClose: () => void
+}) {
+  const providers = useSessionStore((state) => state.providers)
+  const recentModels = useSessionStore((state) => state.recentModels)
+  const selectedModel = useSessionStore((state) => state.selectedModel)
+  const setSelectedModel = useSessionStore((state) => state.setSelectedModel)
+  const [modelSearch, setModelSearch] = useState("")
+
+  const providerOptions = useMemo(
+    () =>
+      providers.map((provider) => {
+        const models = Object.entries(provider.models ?? {}).map(([modelID, model]) => ({
+          providerID: provider.id,
+          modelID,
+          label: `${model.name ?? modelID}`,
+        }))
+        return { providerID: provider.id, providerName: provider.name, models }
+      }),
+    [providers]
+  )
+
+  const handleClose = () => {
+    onClose()
+    setModelSearch("")
+  }
+
+  const handleSelect = (providerID: string, modelID: string) => {
+    setSelectedModel({ providerID, modelID })
+    handleClose()
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
+      <View style={styles.modalBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Select model</Text>
+          <TextInput
+            style={styles.modalSearch}
+            value={modelSearch}
+            onChangeText={setModelSearch}
+            placeholder="Search models..."
+            placeholderTextColor={colors.text.weaker}
+            autoFocus
+          />
+          <View style={styles.modalList}>
+            <ScrollView style={{ maxHeight: 300 }} keyboardShouldPersistTaps="handled">
+              {!modelSearch && recentModels.length > 0 && (
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>Recent</Text>
+                  {recentModels.map((recent) => {
+                    const provider = providers.find((p) => p.id === recent.providerID)
+                    const model = provider?.models?.[recent.modelID]
+                    if (!model) return null
+                    const isSelected =
+                      selectedModel?.providerID === recent.providerID && selectedModel?.modelID === recent.modelID
+                    return (
+                      <Pressable
+                        key={`recent-${recent.providerID}/${recent.modelID}`}
+                        style={[styles.modalItem, isSelected && styles.modalItemActive]}
+                        onPress={() => handleSelect(recent.providerID, recent.modelID)}
+                      >
+                        <Text style={styles.modalItemText}>{model.name ?? recent.modelID}</Text>
+                        <Text style={styles.modalItemSubtext}>{provider?.name}</Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              )}
+              {providerOptions.map((provider) => {
+                const query = modelSearch.toLowerCase()
+                const filtered = query
+                  ? provider.models.filter(
+                      (m) =>
+                        m.label.toLowerCase().includes(query) ||
+                        m.modelID.toLowerCase().includes(query) ||
+                        provider.providerName.toLowerCase().includes(query)
+                    )
+                  : provider.models
+                if (query && filtered.length === 0) return null
+                return (
+                  <View key={provider.providerID} style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>{provider.providerName}</Text>
+                    {filtered.length === 0 ? (
+                      <Text style={styles.modalEmpty}>No models available</Text>
+                    ) : (
+                      filtered.map((option) => {
+                        const isSelected =
+                          selectedModel?.providerID === option.providerID && selectedModel?.modelID === option.modelID
+                        return (
+                          <Pressable
+                            key={`${option.providerID}/${option.modelID}`}
+                            style={[styles.modalItem, isSelected && styles.modalItemActive]}
+                            onPress={() => handleSelect(option.providerID, option.modelID)}
+                          >
+                            <Text style={styles.modalItemText}>{option.label}</Text>
+                          </Pressable>
+                        )
+                      })
+                    )}
+                  </View>
+                )
+              })}
+              {providers.length === 0 ? <Text style={styles.modalEmpty}>No providers available</Text> : null}
+            </ScrollView>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
 
 // --- Main Screen ---
 
@@ -228,16 +419,10 @@ export default function SessionDetailScreen() {
   const currentProject = useSessionStore((state) => state.currentProject)
   const currentServer = useSessionStore((state) => state.currentServer)
   const messages = useSessionStore((state) => state.messages)
-  const messageParts = useSessionStore((state) => state.messageParts)
   const sendPrompt = useSessionStore((state) => state.sendPrompt)
   const fetchMessages = useSessionStore((state) => state.fetchMessages)
-  const fetchProviders = useSessionStore((state) => state.fetchProviders)
   const providers = useSessionStore((state) => state.providers)
-  const recentModels = useSessionStore((state) => state.recentModels)
   const selectedModel = useSessionStore((state) => state.selectedModel)
-  const setSelectedModel = useSessionStore((state) => state.setSelectedModel)
-  const lastError = useSessionStore((state) => state.lastError)
-  const clearError = useSessionStore((state) => state.clearError)
   const abortSession = useSessionStore((state) => state.abortSession)
   const revertSession = useSessionStore((state) => state.revertSession)
   const unrevertSession = useSessionStore((state) => state.unrevertSession)
@@ -248,12 +433,10 @@ export default function SessionDetailScreen() {
   const sessionId = currentSession?.id ?? route.params?.sessionId
 
   const [inputText, setInputText] = useState("")
-  const [isSending, setIsSending] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false)
-  const [modelSearch, setModelSearch] = useState("")
   const flatListRef = useRef<FlashListRef<Message>>(null)
 
   useEffect(() => {
@@ -268,8 +451,8 @@ export default function SessionDetailScreen() {
     if (!currentProject && !currentServer) {
       return
     }
-    void fetchProviders()
-  }, [currentProject, currentServer, fetchProviders])
+    void useSessionStore.getState().fetchProviders()
+  }, [currentProject, currentServer])
 
   // Cleanup EventSource on unmount
   useEffect(() => {
@@ -278,15 +461,8 @@ export default function SessionDetailScreen() {
     }
   }, [])
 
-  // Auto-dismiss error banner after 5 seconds
-  useEffect(() => {
-    if (!lastError) return
-    const timer = setTimeout(() => clearError(), 5000)
-    return () => clearTimeout(timer)
-  }, [lastError])
-
   const handleSend = () => {
-    if (!inputText.trim() || !sessionId || isSending || isAgentWorking) {
+    if (!inputText.trim() || !sessionId || isAgentWorking) {
       return
     }
 
@@ -302,14 +478,12 @@ export default function SessionDetailScreen() {
     return messages
   }, [messages, isAgentWorking])
 
-  const providerOptions = providers.map((provider) => {
-    const models = Object.entries(provider.models ?? {}).map(([modelID, model]) => ({
-      providerID: provider.id,
-      modelID,
-      label: `${model.name ?? modelID}`,
-    }))
-    return { providerID: provider.id, providerName: provider.name, models }
-  })
+  const modelDisplayName = useMemo(() => {
+    if (!selectedModel) return "No model"
+    const provider = providers.find((p) => p.id === selectedModel.providerID)
+    const model = provider?.models?.[selectedModel.modelID]
+    return model?.name ?? selectedModel.modelID
+  }, [selectedModel, providers])
 
   return (
     <KeyboardAvoidingView
@@ -333,6 +507,29 @@ export default function SessionDetailScreen() {
               onPress={() => void abortSession(sessionId)}
             >
               <Ionicons name="stop" size={18} color={palette.ember[9]} />
+            </Pressable>
+          ) : null}
+          {sessionId ? (
+            <Pressable
+              style={[styles.headerButton, !currentSession?.revert?.messageID && styles.headerButtonDisabled]}
+              onPress={() =>
+                void revertSession(
+                  sessionId,
+                  currentSession?.revert?.messageID,
+                  currentSession?.revert?.partID
+                )
+              }
+              disabled={!currentSession?.revert?.messageID}
+            >
+              <Ionicons name="arrow-undo" size={18} color={currentSession?.revert?.messageID ? colors.interactive.base : palette.smoke[4]} />
+            </Pressable>
+          ) : null}
+          {sessionId ? (
+            <Pressable
+              style={styles.headerButton}
+              onPress={() => void unrevertSession(sessionId)}
+            >
+              <Ionicons name="arrow-redo" size={18} color={colors.interactive.base} />
             </Pressable>
           ) : null}
           {sessionId ? (
@@ -364,7 +561,10 @@ export default function SessionDetailScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="chatbox-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
             <Text style={styles.emptyStateText}>
-              No messages yet. Start a conversation!
+              No messages yet
+            </Text>
+            <Text style={styles.emptyStateHint}>
+              Type a message below to get started.
             </Text>
           </View>
         ) : (
@@ -372,11 +572,9 @@ export default function SessionDetailScreen() {
             <FlashList
               ref={flatListRef}
               data={listData}
-              inverted
               keyExtractor={(item) => item.id}
-              estimatedItemSize={120}
-              extraData={messageParts}
               overScrollMode="never"
+              keyboardDismissMode="on-drag"
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -392,9 +590,7 @@ export default function SessionDetailScreen() {
                 if (item.id === "__thinking__") {
                   return <ThinkingIndicator />
                 }
-                return (
-                  <MessageRow message={item} parts={messageParts[item.id] ?? []} />
-                )
+                return <MessageRow message={item} />
               }}
               contentContainerStyle={styles.messagesList}
               onScroll={(event) => {
@@ -415,11 +611,7 @@ export default function SessionDetailScreen() {
         )}
       </View>
 
-      {lastError ? (
-        <Pressable onPress={clearError} style={styles.errorBanner}>
-          <Text style={styles.errorText}>{lastError}</Text>
-        </Pressable>
-      ) : null}
+      <ErrorBanner />
 
       {sessionId && (
         <View style={styles.composer}>
@@ -439,149 +631,31 @@ export default function SessionDetailScreen() {
               <Pressable
                 style={styles.modelChip}
                 onPress={() => {
-                  void fetchProviders()
+                  void useSessionStore.getState().fetchProviders()
                   setIsModelPickerOpen(true)
                 }}
               >
                 <Text style={[styles.modelChipText, !selectedModel && styles.modelChipTextEmpty]}>
-                  {selectedModel
-                    ? (() => {
-                        const provider = providers.find((p) => p.id === selectedModel.providerID)
-                        const model = provider?.models?.[selectedModel.modelID]
-                        return model?.name ?? selectedModel.modelID
-                      })()
-                    : "No model"}
+                  {modelDisplayName}
                 </Text>
                 <Ionicons name="chevron-down" size={10} color={palette.smoke[7]} />
               </Pressable>
               <View style={{ flex: 1 }} />
               <Pressable
-                style={[styles.composerAction, !currentSession?.revert?.messageID && styles.composerActionDisabled]}
-                onPress={() =>
-                  void revertSession(
-                    sessionId,
-                    currentSession?.revert?.messageID,
-                    currentSession?.revert?.partID
-                  )
-                }
-                disabled={!currentSession?.revert?.messageID}
-              >
-                <Ionicons name="arrow-undo" size={16} color={currentSession?.revert?.messageID ? palette.smoke[7] : palette.smoke[4]} />
-              </Pressable>
-              <Pressable
-                style={styles.composerAction}
-                onPress={() => void unrevertSession(sessionId)}
-              >
-                <Ionicons name="arrow-redo" size={16} color={palette.smoke[7]} />
-              </Pressable>
-              <Pressable
                 style={[
                   styles.sendButton,
-                  (!inputText.trim() || isSending || isAgentWorking) && styles.sendButtonDisabled,
+                  (!inputText.trim() || isAgentWorking) && styles.sendButtonDisabled,
                 ]}
                 onPress={handleSend}
               >
-                {isSending ? (
-                  <ActivityIndicator size="small" color={palette.smoke[1]} />
-                ) : (
-                  <Ionicons name="arrow-up" size={20} color={palette.smoke[1]} />
-                )}
+                <Ionicons name="arrow-up" size={20} color={palette.smoke[1]} />
               </Pressable>
             </View>
           </View>
         </View>
       )}
 
-      <Modal
-        visible={isModelPickerOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { setIsModelPickerOpen(false); setModelSearch("") }}
-      >
-        <View style={styles.modalBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setIsModelPickerOpen(false); setModelSearch("") }} />
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Select model</Text>
-            <TextInput
-              style={styles.modalSearch}
-              value={modelSearch}
-              onChangeText={setModelSearch}
-              placeholder="Search models..."
-              placeholderTextColor={colors.text.weaker}
-              autoFocus
-            />
-            <View style={styles.modalList}>
-              <ScrollView style={{ maxHeight: 300 }} keyboardShouldPersistTaps="handled">
-                {!modelSearch && recentModels.length > 0 && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Recent</Text>
-                    {recentModels.map((recent) => {
-                      const provider = providers.find((p) => p.id === recent.providerID)
-                      const model = provider?.models?.[recent.modelID]
-                      if (!model) return null
-                      const isSelected =
-                        selectedModel?.providerID === recent.providerID && selectedModel?.modelID === recent.modelID
-                      return (
-                        <Pressable
-                          key={`recent-${recent.providerID}/${recent.modelID}`}
-                          style={[styles.modalItem, isSelected && styles.modalItemActive]}
-                          onPress={() => {
-                            setSelectedModel({ providerID: recent.providerID, modelID: recent.modelID })
-                            setIsModelPickerOpen(false)
-                            setModelSearch("")
-                          }}
-                        >
-                          <Text style={styles.modalItemText}>{model.name ?? recent.modelID}</Text>
-                          <Text style={styles.modalItemSubtext}>{provider?.name}</Text>
-                        </Pressable>
-                      )
-                    })}
-                  </View>
-                )}
-                {providerOptions.map((provider) => {
-                  const query = modelSearch.toLowerCase()
-                  const filtered = query
-                    ? provider.models.filter(
-                        (m) =>
-                          m.label.toLowerCase().includes(query) ||
-                          m.modelID.toLowerCase().includes(query) ||
-                          provider.providerName.toLowerCase().includes(query)
-                      )
-                    : provider.models
-                  if (query && filtered.length === 0) return null
-                  return (
-                    <View key={provider.providerID} style={styles.modalSection}>
-                      <Text style={styles.modalSectionTitle}>{provider.providerName}</Text>
-                      {filtered.length === 0 ? (
-                        <Text style={styles.modalEmpty}>No models available</Text>
-                      ) : (
-                        filtered.map((option) => {
-                          const isSelected =
-                            selectedModel?.providerID === option.providerID && selectedModel?.modelID === option.modelID
-                          return (
-                            <Pressable
-                              key={`${option.providerID}/${option.modelID}`}
-                              style={[styles.modalItem, isSelected && styles.modalItemActive]}
-                              onPress={() => {
-                                setSelectedModel({ providerID: option.providerID, modelID: option.modelID })
-                                setIsModelPickerOpen(false)
-                                setModelSearch("")
-                              }}
-                            >
-                              <Text style={styles.modalItemText}>{option.label}</Text>
-                            </Pressable>
-                          )
-                        })
-                      )}
-                    </View>
-                  )
-                })}
-              {providers.length === 0 ? <Text style={styles.modalEmpty}>No providers available</Text> : null}
-              </ScrollView>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ModelPicker visible={isModelPickerOpen} onClose={() => setIsModelPickerOpen(false)} />
     </KeyboardAvoidingView>
   )
 }
@@ -611,7 +685,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: colors.text.base,
-    maxWidth: "60%",
+    flexShrink: 1,
   },
   headerRight: {
     flexDirection: "row",
@@ -620,16 +694,8 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: 8,
   },
-  // --- Error banner ---
-  errorBanner: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: palette.ember[2],
-  },
-  errorText: {
-    color: palette.ember[9],
-    fontSize: 13,
-    textAlign: "center",
+  headerButtonDisabled: {
+    opacity: 0.4,
   },
   // --- Messages ---
   messagesContainer: {
@@ -656,6 +722,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text.weak,
     textAlign: "center",
+  },
+  emptyStateHint: {
+    fontSize: 13,
+    color: palette.smoke[6],
+    textAlign: "center",
+    marginTop: 4,
   },
   messagesList: {
     padding: 16,

@@ -4,49 +4,51 @@ import {
     Text,
     StyleSheet,
     Switch,
+    Share,
+    ActivityIndicator,
 } from "react-native"
 import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
+import { Ionicons } from "@expo/vector-icons"
 import * as Clipboard from "expo-clipboard"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import { colors, palette } from "../constants/theme"
 import { Pressable } from "react-native"
+import { ErrorBanner } from "../components/ErrorBanner"
 
 export default function ShareScreen() {
     const route = useRoute<RouteProp<ProjectsStackParamList, "Share">>()
     const currentSession = useSessionStore((state) => state.currentSession)
     const shareSession = useSessionStore((state) => state.shareSession)
     const unshareSession = useSessionStore((state) => state.unshareSession)
-    const lastError = useSessionStore((state) => state.lastError)
-    const clearError = useSessionStore((state) => state.clearError)
-    const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const sessionId = currentSession?.id ?? route.params?.sessionId
     const shareUrl = currentSession?.share?.url
-    const [isEnabled, setIsEnabled] = useState(Boolean(shareUrl))
+    const isEnabled = Boolean(shareUrl)
+    const [isToggling, setIsToggling] = useState(false)
     const [copied, setCopied] = useState(false)
+    const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
-        setIsEnabled(Boolean(shareUrl))
-    }, [shareUrl])
-
-    useEffect(() => {
-        if (!lastError) return
-        if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
-        errorTimerRef.current = setTimeout(() => clearError(), 5000)
-        return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }
-    }, [lastError])
+        return () => {
+            if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+        }
+    }, [])
 
     const handleToggle = async (value: boolean) => {
-        setIsEnabled(value)
-        if (!sessionId) {
+        if (!sessionId || isToggling) {
             return
         }
 
-        if (value) {
-            await shareSession(sessionId)
-        } else {
-            await unshareSession(sessionId)
+        setIsToggling(true)
+        try {
+            if (value) {
+                await shareSession(sessionId)
+            } else {
+                await unshareSession(sessionId)
+            }
+        } finally {
+            setIsToggling(false)
         }
     }
 
@@ -57,31 +59,67 @@ export default function ShareScreen() {
 
         await Clipboard.setStringAsync(shareUrl)
         setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+        copiedTimerRef.current = setTimeout(() => setCopied(false), 2000)
+    }
+
+    const handleShare = async () => {
+        if (!shareUrl) {
+            return
+        }
+
+        await Share.share({
+            url: shareUrl,
+            message: shareUrl,
+        })
     }
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Share Session</Text>
-            <Text style={{ color: colors.text.base }}>Toggle sharing and copy the share link.</Text>
-            <View style={styles.row}>
-                <Text style={{ color: colors.text.base }}>Sharing enabled</Text>
-                <Switch value={isEnabled} onValueChange={handleToggle} />
+            <View style={styles.headerSection}>
+                <Ionicons name="link-outline" size={32} color={palette.smoke[7]} />
+                <Text style={styles.title}>Share Session</Text>
+                <Text style={styles.description}>
+                    Anyone with the link can view this conversation.
+                </Text>
             </View>
-            <Text style={styles.label}>Share Link</Text>
-            <Text style={{ color: colors.text.base }}>{shareUrl ?? "Not shared yet"}</Text>
-            <Pressable
-                style={[styles.button, !shareUrl && styles.buttonDisabled]}
-                onPress={handleCopy}
-                disabled={!shareUrl}
-            >
-                <Text style={styles.buttonText}>{copied ? "Copied!" : "Copy Link"}</Text>
-            </Pressable>
-            {lastError ? (
-                <Pressable onPress={clearError} style={styles.errorBanner}>
-                    <Text style={styles.errorText}>{lastError}</Text>
-                </Pressable>
+
+            <View style={styles.card}>
+                <View style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.rowLabel}>Sharing enabled</Text>
+                        {isToggling && (
+                            <ActivityIndicator size="small" color={palette.smoke[7]} style={{ marginTop: 4 }} />
+                        )}
+                    </View>
+                    <Switch
+                        value={isEnabled}
+                        onValueChange={(value) => void handleToggle(value)}
+                        disabled={isToggling}
+                    />
+                </View>
+            </View>
+
+            {shareUrl ? (
+                <View style={styles.card}>
+                    <Text style={styles.linkLabel}>Share link</Text>
+                    <Text style={styles.linkUrl} numberOfLines={2} selectable>
+                        {shareUrl}
+                    </Text>
+                    <View style={styles.buttonRow}>
+                        <Pressable style={styles.button} onPress={() => void handleCopy()}>
+                            <Ionicons name={copied ? "checkmark" : "copy-outline"} size={16} color={colors.text.invert} />
+                            <Text style={styles.buttonText}>{copied ? "Copied!" : "Copy"}</Text>
+                        </Pressable>
+                        <Pressable style={styles.button} onPress={() => void handleShare()}>
+                            <Ionicons name="share-outline" size={16} color={colors.text.invert} />
+                            <Text style={styles.buttonText}>Share</Text>
+                        </Pressable>
+                    </View>
+                </View>
             ) : null}
+
+            <ErrorBanner />
         </View>
     )
 }
@@ -90,48 +128,69 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         padding: 16,
-        gap: 12,
+        gap: 16,
         backgroundColor: colors.background.base,
+    },
+    headerSection: {
+        alignItems: "center",
+        paddingVertical: 16,
+        gap: 8,
     },
     title: {
         fontSize: 20,
         fontWeight: "600",
         color: colors.text.base,
     },
-    label: {
+    description: {
         fontSize: 14,
-        fontWeight: "500",
-        marginTop: 12,
         color: colors.text.weak,
+        textAlign: "center",
+    },
+    card: {
+        padding: 14,
+        borderRadius: 12,
+        backgroundColor: palette.smoke[2],
+        gap: 10,
     },
     row: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
     },
-    errorBanner: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        backgroundColor: palette.ember[2],
-        borderRadius: 8,
+    rowLabel: {
+        fontSize: 15,
+        fontWeight: "500",
+        color: colors.text.base,
     },
-    errorText: {
-        color: palette.ember[9],
+    linkLabel: {
+        fontSize: 12,
+        fontWeight: "500",
+        color: palette.smoke[7],
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+    },
+    linkUrl: {
         fontSize: 13,
-        textAlign: "center",
+        color: palette.smoke[9],
+        fontFamily: "Menlo",
+    },
+    buttonRow: {
+        flexDirection: "row",
+        gap: 8,
     },
     button: {
-        paddingVertical: 12,
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        paddingVertical: 10,
         borderRadius: 8,
         backgroundColor: colors.interactive.base,
-        alignItems: "center",
-    },
-    buttonDisabled: {
-        backgroundColor: colors.interactive.hover,
-        opacity: 0.5,
     },
     buttonText: {
         color: colors.text.invert,
         fontWeight: "600",
+        fontSize: 14,
     },
 })

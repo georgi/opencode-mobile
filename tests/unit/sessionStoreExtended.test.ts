@@ -214,7 +214,7 @@ describe("SessionStore Event Handling Integration", () => {
       const partID = "part-stream-1"
 
       let callCount = 0
-      client.event.subscribe.mockImplementation(async () => ({
+      ;(client.event.subscribe as jest.Mock).mockImplementation(async () => ({
         stream: {
           [Symbol.asyncIterator]: () => ({
             next: async () => {

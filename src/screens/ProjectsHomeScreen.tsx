@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import { View, Text, StyleSheet, Pressable, RefreshControl } from "react-native"
 import { FlashList } from "@shopify/flash-list"
 import { Ionicons } from "@expo/vector-icons"
@@ -11,6 +11,7 @@ import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { Project } from "@opencode-ai/sdk/v2/client"
 import type { AppTabParamList } from "../navigation/AppTabs"
 import { palette } from "../constants/theme"
+import { ErrorBanner } from "../components/ErrorBanner"
 
 type ProjectsHomeNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<ProjectsStackParamList>,
@@ -22,19 +23,10 @@ export default function ProjectsHomeScreen() {
   const currentServer = useSessionStore((state) => state.currentServer)
   const currentProject = useSessionStore((state) => state.currentProject)
   const projects = useSessionStore((state) => state.projects)
+  const servers = useSessionStore((state) => state.servers)
   const fetchProjects = useSessionStore((state) => state.fetchProjects)
   const selectProject = useSessionStore((state) => state.selectProject)
-  const lastError = useSessionStore((state) => state.lastError)
-  const clearError = useSessionStore((state) => state.clearError)
   const [refreshing, setRefreshing] = useState(false)
-  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    if (!lastError) return
-    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
-    errorTimerRef.current = setTimeout(() => clearError(), 5000)
-    return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }
-  }, [lastError])
 
   useEffect(() => {
     if (!currentServer) {
@@ -52,21 +44,40 @@ export default function ProjectsHomeScreen() {
 
   return (
     <View style={styles.container}>
-      {lastError ? (
-        <Pressable onPress={clearError} style={styles.errorBanner}>
-          <Text style={styles.errorText}>{lastError}</Text>
-        </Pressable>
-      ) : null}
-      {projects.length === 0 ? (
+      <ErrorBanner />
+      {servers.length === 0 ? (
+        <View style={styles.emptyState}>
+          <View style={styles.welcomeCard}>
+            <Ionicons name="rocket-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
+            <Text style={styles.welcomeTitle}>Welcome to OpenCode</Text>
+            <Text style={styles.welcomeSubtitle}>
+              Connect to your first server to get started.
+            </Text>
+            <Pressable
+              style={styles.welcomeButton}
+              onPress={() => navigation.navigate("Settings" as never)}
+            >
+              <Text style={styles.welcomeButtonText}>Set Up Server</Text>
+            </Pressable>
+            <Pressable onPress={() => navigation.navigate("Settings" as never)}>
+              <Text style={styles.welcomeSecondary}>
+                Or scan your network to find servers automatically
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : projects.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="folder-open-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
           <Text style={styles.emptyText}>No projects</Text>
+          <Text style={styles.emptyHint}>
+            {currentServer ? "No projects found on this server." : "Select a server in Settings."}
+          </Text>
         </View>
       ) : (
         <FlashList
           data={projects}
           keyExtractor={(project: Project) => project.id}
-          estimatedItemSize={60}
           contentContainerStyle={styles.projectList as never}
           refreshControl={
             <RefreshControl
@@ -110,16 +121,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.smoke[1],
   },
-  errorBanner: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: palette.ember[2],
-  },
-  errorText: {
-    color: palette.ember[9],
-    fontSize: 13,
-    textAlign: "center",
-  },
   emptyState: {
     flex: 1,
     justifyContent: "center",
@@ -128,6 +129,49 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 15,
     color: palette.smoke[7],
+  },
+  emptyHint: {
+    fontSize: 13,
+    color: palette.smoke[6],
+    marginTop: 4,
+    textAlign: "center",
+    paddingHorizontal: 24,
+  },
+  welcomeCard: {
+    alignItems: "center",
+    padding: 24,
+    gap: 8,
+  },
+  welcomeTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: palette.smoke[11],
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    color: palette.smoke[7],
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  welcomeButton: {
+    width: "100%",
+    maxWidth: 280,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: palette.cobalt[9],
+    alignItems: "center",
+  },
+  welcomeButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  welcomeSecondary: {
+    fontSize: 13,
+    color: palette.smoke[7],
+    textAlign: "center",
+    marginTop: 12,
+    textDecorationLine: "underline",
   },
   projectList: {
     padding: 16,

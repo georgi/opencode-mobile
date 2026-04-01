@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react"
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView, Platform } from "react-native"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView, RefreshControl, Platform } from "react-native"
 import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
+import { Ionicons } from "@expo/vector-icons"
 import * as Diff from "diff"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
@@ -10,7 +11,10 @@ import { colors, palette } from "../constants/theme"
 
 function DiffViewer({ diff }: { diff: FileDiff }) {
     const [showUnchanged, setShowUnchanged] = useState(false)
-    const diffResult = Diff.diffLines(diff.before, diff.after)
+    const diffResult = useMemo(
+        () => Diff.diffLines(diff.before, diff.after),
+        [diff.before, diff.after]
+    )
     const unchangedCount = diffResult.filter(part => !part.added && !part.removed).length
 
     const visibleParts = showUnchanged ? diffResult : diffResult.filter(part => part.added || part.removed)
@@ -55,7 +59,7 @@ function FileAccordionItem({
             <Pressable onPress={onToggle} style={styles.accordionHeader}>
                 <View style={styles.accordionHeaderLeft}>
                     <Text style={styles.accordionIcon}>{isExpanded ? "▼" : "▶"}</Text>
-                    <Text style={styles.accordionFilename}>{diff.file}</Text>
+                    <Text style={styles.accordionFilename} numberOfLines={1}>{diff.file}</Text>
                 </View>
                 <View style={styles.accordionStats}>
                     <Text style={styles.diffStatAdded}>+{diff.additions}</Text>
@@ -82,6 +86,7 @@ export default function ReviewScreen() {
     const currentSession = useSessionStore((state) => state.currentSession)
     const sessionId = currentSession?.id ?? route.params?.sessionId
     const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
+    const [refreshing, setRefreshing] = useState(false)
 
     const toggleFile = (file: string) => {
         const newExpanded = new Set(expandedFiles)
@@ -93,12 +98,35 @@ export default function ReviewScreen() {
         setExpandedFiles(newExpanded)
     }
 
+    const expandAll = () => {
+        setExpandedFiles(new Set(diffs.map((d) => d.file)))
+    }
+
+    const collapseAll = () => {
+        setExpandedFiles(new Set())
+    }
+
+    const allExpanded = diffs.length > 0 && expandedFiles.size === diffs.length
+
+    const summary = useMemo(() => {
+        const totalAdditions = diffs.reduce((sum, d) => sum + d.additions, 0)
+        const totalDeletions = diffs.reduce((sum, d) => sum + d.deletions, 0)
+        return { fileCount: diffs.length, totalAdditions, totalDeletions }
+    }, [diffs])
+
     useEffect(() => {
         if (!sessionId) {
             return
         }
 
         void fetchDiffs(sessionId)
+    }, [sessionId, fetchDiffs])
+
+    const onRefresh = useCallback(async () => {
+        if (!sessionId) return
+        setRefreshing(true)
+        await fetchDiffs(sessionId)
+        setRefreshing(false)
     }, [sessionId, fetchDiffs])
 
     return (
@@ -121,19 +149,47 @@ export default function ReviewScreen() {
                 </View>
             ) : diffs.length === 0 ? (
                 <View style={styles.emptyState}>
+                    <Ionicons name="checkmark-done-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
                     <Text style={styles.emptyStateText}>No changes</Text>
+                    <Text style={styles.emptyStateHint}>This session hasn't modified any files yet.</Text>
                 </View>
             ) : (
-                <ScrollView style={styles.fileList} showsVerticalScrollIndicator={true}>
-                    {diffs.map((diff) => (
-                        <FileAccordionItem
-                            key={diff.file}
-                            diff={diff}
-                            isExpanded={expandedFiles.has(diff.file)}
-                            onToggle={() => toggleFile(diff.file)}
-                        />
-                    ))}
-                </ScrollView>
+                <>
+                    <View style={styles.summaryRow}>
+                        <Text style={styles.summaryText}>
+                            {summary.fileCount} {summary.fileCount === 1 ? "file" : "files"} changed
+                        </Text>
+                        <View style={styles.summaryStats}>
+                            <Text style={styles.summaryAdded}>+{summary.totalAdditions}</Text>
+                            <Text style={styles.summaryRemoved}>-{summary.totalDeletions}</Text>
+                        </View>
+                        <Pressable onPress={allExpanded ? collapseAll : expandAll} hitSlop={8}>
+                            <Text style={styles.expandCollapseText}>
+                                {allExpanded ? "Collapse all" : "Expand all"}
+                            </Text>
+                        </Pressable>
+                    </View>
+                    <ScrollView
+                        style={styles.fileList}
+                        showsVerticalScrollIndicator={true}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={refreshing}
+                                onRefresh={() => void onRefresh()}
+                                tintColor={palette.smoke[7]}
+                            />
+                        }
+                    >
+                        {diffs.map((diff) => (
+                            <FileAccordionItem
+                                key={diff.file}
+                                diff={diff}
+                                isExpanded={expandedFiles.has(diff.file)}
+                                onToggle={() => toggleFile(diff.file)}
+                            />
+                        ))}
+                    </ScrollView>
+                </>
             )}
         </View>
     )
@@ -171,6 +227,39 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: colors.text.weak,
     },
+    emptyStateHint: {
+        fontSize: 13,
+        color: palette.smoke[6],
+    },
+    summaryRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    summaryText: {
+        fontSize: 13,
+        color: colors.text.weak,
+    },
+    summaryStats: {
+        flexDirection: "row",
+        gap: 6,
+        flex: 1,
+    },
+    summaryAdded: {
+        fontSize: 13,
+        color: colors.diff.add,
+        fontWeight: "500",
+    },
+    summaryRemoved: {
+        fontSize: 13,
+        color: colors.diff.delete,
+        fontWeight: "500",
+    },
+    expandCollapseText: {
+        fontSize: 13,
+        color: palette.smoke[9],
+        fontWeight: "500",
+    },
     fileList: {
         flex: 1,
     },
@@ -203,6 +292,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: "500",
         color: colors.text.base,
+        flex: 1,
     },
     accordionStats: {
         flexDirection: "row",
