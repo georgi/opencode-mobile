@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import {
   View,
   Text,
@@ -40,7 +40,16 @@ export default function SessionsListScreen() {
   const fetchSessions = useSessionStore((state) => state.fetchSessions)
   const setSession = useSessionStore((state) => state.setSession)
   const lastError = useSessionStore((state) => state.lastError)
+  const clearError = useSessionStore((state) => state.clearError)
   const [refreshing, setRefreshing] = useState(false)
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!lastError) return
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    errorTimerRef.current = setTimeout(() => clearError(), 5000)
+    return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }
+  }, [lastError])
 
   useEffect(() => {
     if (!currentProject) {
@@ -95,7 +104,11 @@ export default function SessionsListScreen() {
         </View>
       </View>
 
-      {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+      {lastError ? (
+        <Pressable onPress={clearError} style={styles.errorBanner}>
+          <Text style={styles.errorText}>{lastError}</Text>
+        </Pressable>
+      ) : null}
 
       {!currentProject ? (
         <View style={styles.emptyState}>
@@ -103,6 +116,7 @@ export default function SessionsListScreen() {
         </View>
       ) : sessions.length === 0 ? (
         <View style={styles.emptyState}>
+          <Ionicons name="chatbubbles-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
           <Text style={styles.emptyTitle}>No sessions yet</Text>
           <Text style={styles.emptySubtitle}>Start your first session</Text>
         </View>
@@ -119,10 +133,12 @@ export default function SessionsListScreen() {
               tintColor={palette.smoke[7]}
             />
           }
-          renderItem={({ item }: { item: Session }) => (
+          renderItem={({ item }: { item: Session }) => {
+            const isActive = item.id === currentSession?.id
+            return (
             <Pressable
               onPress={() => handleSelectSession(item.id)}
-              style={styles.sessionItem}
+              style={[styles.sessionItem, isActive && styles.sessionItemActive]}
             >
               <View style={styles.sessionInfo}>
                 <Text style={styles.sessionTitle} numberOfLines={1}>
@@ -134,7 +150,8 @@ export default function SessionsListScreen() {
               </View>
               <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
             </Pressable>
-          )}
+            )
+          }}
         />
       )}
 
@@ -180,12 +197,15 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   // --- Content ---
-  error: {
-    color: palette.smoke[11],
-    backgroundColor: palette.smoke[3],
-    padding: 12,
-    margin: 16,
-    borderRadius: 8,
+  errorBanner: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: palette.ember[2],
+  },
+  errorText: {
+    color: palette.ember[9],
+    fontSize: 13,
+    textAlign: "center",
   },
   emptyState: {
     flex: 1,
@@ -211,6 +231,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: palette.smoke[2],
     marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "transparent",
+  },
+  sessionItemActive: {
+    backgroundColor: palette.smoke[3],
+    borderLeftColor: palette.smoke[10],
   },
   sessionInfo: {
     flex: 1,

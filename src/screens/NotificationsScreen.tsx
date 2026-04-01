@@ -66,6 +66,7 @@ export default function NotificationsScreen() {
 
             {pendingPermissions.length === 0 ? (
                 <View style={styles.emptyState}>
+                    <Ionicons name="checkmark-circle-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
                     <Text style={styles.emptyText}>No pending permissions</Text>
                 </View>
             ) : (

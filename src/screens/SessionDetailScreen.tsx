@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  RefreshControl,
 } from "react-native"
 import { FlashList, type FlashListRef } from "@shopify/flash-list"
 import { useNavigation, useRoute } from "@react-navigation/native"
@@ -250,6 +251,7 @@ export default function SessionDetailScreen() {
   const [isSending, setIsSending] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false)
   const [modelSearch, setModelSearch] = useState("")
   const flatListRef = useRef<FlashListRef<Message>>(null)
@@ -360,6 +362,7 @@ export default function SessionDetailScreen() {
           </View>
         ) : messages.length === 0 ? (
           <View style={styles.emptyState}>
+            <Ionicons name="chatbox-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
             <Text style={styles.emptyStateText}>
               No messages yet. Start a conversation!
             </Text>
@@ -374,6 +377,17 @@ export default function SessionDetailScreen() {
               estimatedItemSize={120}
               extraData={messageParts}
               overScrollMode="never"
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={() => {
+                    if (!sessionId) return
+                    setIsRefreshing(true)
+                    void fetchMessages(sessionId).finally(() => setIsRefreshing(false))
+                  }}
+                  tintColor={palette.smoke[7]}
+                />
+              }
               renderItem={({ item }) => {
                 if (item.id === "__thinking__") {
                   return <ThinkingIndicator />
@@ -402,9 +416,9 @@ export default function SessionDetailScreen() {
       </View>
 
       {lastError ? (
-        <View style={styles.errorBanner}>
+        <Pressable onPress={clearError} style={styles.errorBanner}>
           <Text style={styles.errorText}>{lastError}</Text>
-        </View>
+        </Pressable>
       ) : null}
 
       {sessionId && (
@@ -442,7 +456,7 @@ export default function SessionDetailScreen() {
               </Pressable>
               <View style={{ flex: 1 }} />
               <Pressable
-                style={styles.composerAction}
+                style={[styles.composerAction, !currentSession?.revert?.messageID && styles.composerActionDisabled]}
                 onPress={() =>
                   void revertSession(
                     sessionId,
@@ -450,8 +464,9 @@ export default function SessionDetailScreen() {
                     currentSession?.revert?.partID
                   )
                 }
+                disabled={!currentSession?.revert?.messageID}
               >
-                <Ionicons name="arrow-undo" size={16} color={palette.smoke[7]} />
+                <Ionicons name="arrow-undo" size={16} color={currentSession?.revert?.messageID ? palette.smoke[7] : palette.smoke[4]} />
               </Pressable>
               <Pressable
                 style={styles.composerAction}
@@ -743,7 +758,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   toolOverlayScroll: {
-    maxHeight: 200,
+    maxHeight: 400,
     backgroundColor: palette.smoke[2],
     borderRadius: 8,
     padding: 10,
@@ -804,6 +819,9 @@ const styles = StyleSheet.create({
   },
   composerAction: {
     padding: 6,
+  },
+  composerActionDisabled: {
+    opacity: 0.4,
   },
   sendButton: {
     width: 44,

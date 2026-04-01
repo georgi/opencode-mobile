@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import {
     View,
     Text,
     StyleSheet,
     Switch,
-    TextInput,
 } from "react-native"
 import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
 import * as Clipboard from "expo-clipboard"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
-import { colors } from "../constants/theme"
+import { colors, palette } from "../constants/theme"
 import { Pressable } from "react-native"
 
 export default function ShareScreen() {
@@ -20,14 +19,23 @@ export default function ShareScreen() {
     const shareSession = useSessionStore((state) => state.shareSession)
     const unshareSession = useSessionStore((state) => state.unshareSession)
     const lastError = useSessionStore((state) => state.lastError)
+    const clearError = useSessionStore((state) => state.clearError)
+    const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const sessionId = currentSession?.id ?? route.params?.sessionId
     const shareUrl = currentSession?.share?.url
     const [isEnabled, setIsEnabled] = useState(Boolean(shareUrl))
-    const [expirationDays, setExpirationDays] = useState("7")
+    const [copied, setCopied] = useState(false)
 
     useEffect(() => {
         setIsEnabled(Boolean(shareUrl))
     }, [shareUrl])
+
+    useEffect(() => {
+        if (!lastError) return
+        if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+        errorTimerRef.current = setTimeout(() => clearError(), 5000)
+        return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }
+    }, [lastError])
 
     const handleToggle = async (value: boolean) => {
         setIsEnabled(value)
@@ -48,6 +56,8 @@ export default function ShareScreen() {
         }
 
         await Clipboard.setStringAsync(shareUrl)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
     }
 
     return (
@@ -65,16 +75,13 @@ export default function ShareScreen() {
                 onPress={handleCopy}
                 disabled={!shareUrl}
             >
-                <Text style={styles.buttonText}>Copy Link</Text>
+                <Text style={styles.buttonText}>{copied ? "Copied!" : "Copy Link"}</Text>
             </Pressable>
-            <Text style={styles.label}>Expires in (days)</Text>
-            <TextInput
-                style={styles.input}
-                value={expirationDays}
-                onChangeText={setExpirationDays}
-                keyboardType="numeric"
-            />
-            {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+            {lastError ? (
+                <Pressable onPress={clearError} style={styles.errorBanner}>
+                    <Text style={styles.errorText}>{lastError}</Text>
+                </Pressable>
+            ) : null}
         </View>
     )
 }
@@ -102,18 +109,16 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "space-between",
     },
-    input: {
-        borderWidth: 1,
-        borderColor: colors.input.border,
-        borderRadius: 8,
-        paddingHorizontal: 12,
+    errorBanner: {
         paddingVertical: 8,
-        color: colors.text.base,
-        backgroundColor: colors.input.bg,
+        paddingHorizontal: 16,
+        backgroundColor: palette.ember[2],
+        borderRadius: 8,
     },
-    error: {
-        color: colors.status.error,
-        marginTop: 12,
+    errorText: {
+        color: palette.ember[9],
+        fontSize: 13,
+        textAlign: "center",
     },
     button: {
         paddingVertical: 12,

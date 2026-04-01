@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState, useRef } from "react"
 import { View, Text, StyleSheet, Pressable, RefreshControl } from "react-native"
 import { FlashList } from "@shopify/flash-list"
 import { Ionicons } from "@expo/vector-icons"
@@ -25,7 +25,16 @@ export default function ProjectsHomeScreen() {
   const fetchProjects = useSessionStore((state) => state.fetchProjects)
   const selectProject = useSessionStore((state) => state.selectProject)
   const lastError = useSessionStore((state) => state.lastError)
+  const clearError = useSessionStore((state) => state.clearError)
   const [refreshing, setRefreshing] = useState(false)
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!lastError) return
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    errorTimerRef.current = setTimeout(() => clearError(), 5000)
+    return () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }
+  }, [lastError])
 
   useEffect(() => {
     if (!currentServer) {
@@ -43,9 +52,14 @@ export default function ProjectsHomeScreen() {
 
   return (
     <View style={styles.container}>
-      {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+      {lastError ? (
+        <Pressable onPress={clearError} style={styles.errorBanner}>
+          <Text style={styles.errorText}>{lastError}</Text>
+        </Pressable>
+      ) : null}
       {projects.length === 0 ? (
         <View style={styles.emptyState}>
+          <Ionicons name="folder-open-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
           <Text style={styles.emptyText}>No projects</Text>
         </View>
       ) : (
@@ -96,12 +110,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.smoke[1],
   },
-  error: {
-    color: palette.smoke[11],
-    backgroundColor: palette.smoke[3],
-    padding: 12,
-    margin: 16,
-    borderRadius: 8,
+  errorBanner: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: palette.ember[2],
+  },
+  errorText: {
+    color: palette.ember[9],
+    fontSize: 13,
+    textAlign: "center",
   },
   emptyState: {
     flex: 1,
