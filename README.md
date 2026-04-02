@@ -10,10 +10,10 @@ A touch-first Expo app that mirrors core OpenCode web flows (projects, sessions,
 - Share links and basic server health/offline handling
 
 ## Screenshots
-![Screenshot 1](opencode.jpeg)
-![Screenshot 2](opencode2.jpeg)
-![Screenshot 3](opencode3.jpeg)
-![Screenshot 4](opencode4.jpeg)
+![Screenshot 1](opencode1.png)
+![Screenshot 2](opencode2.png)
+![Screenshot 3](opencode3.png)
+![Screenshot 4](opencode4.png)
 
 ## Tech Stack
 - Expo SDK 54 / React Native 0.81
@@ -45,7 +45,7 @@ Then choose a platform:
 
 ## Configuration
 Open the **Settings** tab in the app to add a server:
-- **Base URL:** defaults to `https://api.opencode.ai`
+- **Base URL:** host that runs opencode serve (e.g. on your computer)
 - **Directory:** repo root on the server
 - **Basic auth:** optional, if your server requires it
 
