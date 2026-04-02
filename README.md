@@ -1,6 +1,6 @@
-# OpenCode Expo Touch Client
+# OpenCode Mobile App
 
-A touch-first Expo app that mirrors core OpenCode web flows (projects, sessions, diffs, sharing) with mobile-first navigation and streaming responses. All API calls go through the OpenCode SDK client.
+A mobile app that mirrors core OpenCode web flows (projects, sessions, diffs, sharing) with mobile-first navigation and streaming responses. All API calls go through the OpenCode SDK client.
 
 ## Features
 - Project and session browsing with fast, virtualized lists
