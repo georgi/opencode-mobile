@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   searchContainerFocused: {
-    borderColor: palette.cobalt[9],
+    borderColor: palette.lilac[9],
   },
   searchIcon: {
     marginRight: 8,

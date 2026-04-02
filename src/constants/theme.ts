@@ -147,6 +147,13 @@ export const colors = {
     text: palette.smoke[12],
   },
 
+  // Accent — used for focus rings, active indicators, CTAs
+  accent: {
+    base: palette.lilac[9],   // #edb2f1 — primary accent
+    strong: palette.lilac[8], // #8f6192 — muted/bg accent
+    bg: palette.lilac[2],     // #160e17 — subtle tinted background
+  },
+
   // Status
   status: {
     success: palette.apple[9],
@@ -167,7 +174,7 @@ export const colors = {
   input: {
     bg: palette.smoke[2],
     border: palette.smoke[4],
-    focus: palette.cobalt[9],
+    focus: palette.lilac[9],
   },
 };
 

@@ -124,7 +124,7 @@ export default function AppTabs() {
           height: 88, // Taller tab bar for modern look
           paddingTop: 8,
         },
-        tabBarActiveTintColor: palette.cobalt[9],
+        tabBarActiveTintColor: palette.lilac[9],
         tabBarInactiveTintColor: palette.smoke[7],
         tabBarLabelStyle: {
           fontWeight: "500",

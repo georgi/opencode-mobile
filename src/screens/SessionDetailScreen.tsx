@@ -1027,7 +1027,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   composerCardFocused: {
-    borderColor: palette.cobalt[9],
+    borderColor: palette.lilac[9],
   },
   composerInput: {
     paddingHorizontal: 14,
@@ -1123,7 +1123,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface.base,
   },
   modalSearchFocused: {
-    borderColor: palette.cobalt[9],
+    borderColor: palette.lilac[9],
   },
   modalList: {
     gap: 8,
@@ -1146,7 +1146,7 @@ const styles = StyleSheet.create({
   },
   modalItemActive: {
     borderColor: colors.interactive.base,
-    backgroundColor: palette.cobalt[1],
+    backgroundColor: palette.lilac[2],
   },
   modalItemText: {
     color: colors.text.base,

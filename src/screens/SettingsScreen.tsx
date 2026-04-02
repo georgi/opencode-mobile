@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
     borderLeftColor: "transparent",
   },
   serverItemActive: {
-    borderLeftColor: palette.cobalt[9],
+    borderLeftColor: palette.lilac[9],
   },
   serverInfo: {
     flex: 1,
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   inputFocused: {
-    borderColor: palette.cobalt[9],
+    borderColor: palette.lilac[9],
   },
   baseUrlError: {
     color: palette.ember[9],
