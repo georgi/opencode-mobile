@@ -6,7 +6,6 @@ import {
     ScrollView,
     RefreshControl,
     ActivityIndicator,
-    Alert,
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -139,18 +138,13 @@ export default function NotificationsScreen() {
                         ) : null}
                         <PressableScale
                             onPress={() => {
+                                // The local sessions list is scoped to whichever project
+                                // SessionsListScreen last loaded, so a same-project permission
+                                // can legitimately miss it on cold-start. Pre-populate
+                                // currentSession when we have it; otherwise navigate and let
+                                // SessionDetailScreen load the session from the route param.
                                 const found = sessions.find((s) => s.id === permission.sessionID)
-                                if (!found) {
-                                    // The local sessions list is scoped to the current project, so a
-                                    // permission from a *different* project legitimately won't be
-                                    // here. Tell the user rather than navigate into a blank screen.
-                                    Alert.alert(
-                                        "Session not loaded",
-                                        "This permission belongs to a different project. Switch to that project to open the session.",
-                                    )
-                                    return
-                                }
-                                setSession(found)
+                                if (found) setSession(found)
                                 navigation.navigate("SessionDetail", {
                                     sessionId: permission.sessionID,
                                 })
