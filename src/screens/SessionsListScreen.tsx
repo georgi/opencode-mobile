@@ -20,6 +20,7 @@ import type { Session } from "@opencode-ai/sdk/v2/client"
 import { palette } from "../constants/theme"
 import { PressableScale } from "../components/PressableScale"
 import { ErrorBanner } from "../components/ErrorBanner"
+import { ListSkeleton } from "../components/ListSkeleton"
 import * as Haptics from "expo-haptics"
 
 function relativeTime(timestamp: number): string {
@@ -42,6 +43,7 @@ export default function SessionsListScreen() {
   const currentProject = useSessionStore((state) => state.currentProject)
   const currentSession = useSessionStore((state) => state.currentSession)
   const sessions = useSessionStore((state) => state.sessions)
+  const isSessionsLoading = useSessionStore((state) => state.isSessionsLoading)
   const createSession = useSessionStore((state) => state.createSession)
   const fetchSessions = useSessionStore((state) => state.fetchSessions)
   const setSession = useSessionStore((state) => state.setSession)
@@ -223,6 +225,8 @@ export default function SessionsListScreen() {
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Select a project to view sessions.</Text>
         </View>
+      ) : isSessionsLoading && sessions.length === 0 ? (
+        <ListSkeleton rowHeight={56} count={6} />
       ) : sessions.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="chatbubbles-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />

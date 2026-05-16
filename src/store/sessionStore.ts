@@ -54,6 +54,8 @@ export type SessionState = {
   selectedModel?: { providerID: string; modelID: string }
   recentModels: { providerID: string; modelID: string }[]
   projects: Project[]
+  isProjectsLoading: boolean
+  isSessionsLoading: boolean
   pendingPermissions: PermissionRequest[]
   isOffline: boolean
   lastError?: string
@@ -76,6 +78,10 @@ export type SessionState = {
   _sessionScope: number
   // Internal: timestamp of last successful fetchMessages — used to dedupe SSE-reconnect refetches
   _lastMessagesFetchAt: number
+  // Internal: in-flight counters so isProjectsLoading/isSessionsLoading stays
+  // true while any concurrent fetch is still running.
+  _projectsInflight: number
+  _sessionsInflight: number
 }
 
 export const initialSessionState: SessionState = {
@@ -88,6 +94,8 @@ export const initialSessionState: SessionState = {
   providers: [],
   recentModels: [],
   projects: [],
+  isProjectsLoading: false,
+  isSessionsLoading: false,
   pendingPermissions: [],
   isOffline: false,
   errorSeq: 0,
@@ -106,6 +114,8 @@ export const initialSessionState: SessionState = {
   _fetchSeq: 0,
   _sessionScope: 0,
   _lastMessagesFetchAt: 0,
+  _projectsInflight: 0,
+  _sessionsInflight: 0,
 }
 
 type SessionActions = {
@@ -656,17 +666,31 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentServer?.directory
-      const result = await client.project.list({ directory })
-      const projects = resolveData(result)
+      set((s) => ({
+        _projectsInflight: s._projectsInflight + 1,
+        isProjectsLoading: true,
+      }))
+      try {
+        const directory = get().currentServer?.directory
+        const result = await client.project.list({ directory })
+        const projects = resolveData(result)
 
-      if (!projects) {
-        set({ lastError: "ERR SERVER UNAVAILABLE" })
-        return undefined
+        if (!projects) {
+          set({ lastError: "ERR SERVER UNAVAILABLE" })
+          return undefined
+        }
+
+        set({ projects, lastError: undefined })
+        return projects
+      } finally {
+        // Only clear the public loading flag when *all* concurrent fetches
+        // have settled — otherwise the UI flips back to empty-state while
+        // a later fetch is still running.
+        set((s) => {
+          const next = Math.max(0, s._projectsInflight - 1)
+          return { _projectsInflight: next, isProjectsLoading: next > 0 }
+        })
       }
-
-      set({ projects, lastError: undefined })
-      return projects
     },
     selectProject: (project) => set({ currentProject: project }),
     fetchProviders: async () => {
@@ -717,16 +741,29 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const result = await client.session.list({ directory: currentProject.worktree })
-      const sessions = resolveData(result)
+      set((s) => ({
+        _sessionsInflight: s._sessionsInflight + 1,
+        isSessionsLoading: true,
+      }))
+      try {
+        const result = await client.session.list({ directory: currentProject.worktree })
+        const sessions = resolveData(result)
 
-      if (!sessions) {
-        set({ lastError: "ERR SERVER UNAVAILABLE" })
-        return undefined
+        if (!sessions) {
+          set({ lastError: "ERR SERVER UNAVAILABLE" })
+          return undefined
+        }
+
+        set({ sessions, lastError: undefined })
+        return sessions
+      } finally {
+        // See fetchProjects above — counter pattern keeps loading=true while
+        // any concurrent fetchSessions is still in flight.
+        set((s) => {
+          const next = Math.max(0, s._sessionsInflight - 1)
+          return { _sessionsInflight: next, isSessionsLoading: next > 0 }
+        })
       }
-
-      set({ sessions, lastError: undefined })
-      return sessions
     },
     createSession: async (options) => {
       const client = ensureClient()
