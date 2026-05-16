@@ -474,6 +474,8 @@ function ModelPicker({
 // Stable action references — zustand actions are referentially stable, so
 // grouping them into a single selector avoids 9 separate subscriptions without
 // causing extra re-renders.
+const MAX_INPUT_LENGTH = 10000
+const CHAR_COUNT_THRESHOLD = 9000
 const useActions = () =>
   useSessionStore(
     useShallow((state) => ({
@@ -484,6 +486,7 @@ const useActions = () =>
       unrevertSession: state.unrevertSession,
       subscribeToEvents: state.subscribeToEvents,
       closeEventSource: state.closeEventSource,
+      cancelInflight: state.cancelInflight,
     }))
   )
 
@@ -501,6 +504,7 @@ export default function SessionDetailScreen() {
     unrevertSession,
     subscribeToEvents,
     closeEventSource,
+    cancelInflight,
   } = useActions()
 
   // Reactive state (individual selectors — each triggers re-render only when its value changes)
@@ -522,7 +526,14 @@ export default function SessionDetailScreen() {
   const flatListRef = useRef<FlashListRef<Message>>(null)
   const inputRef = useRef<TextInput>(null)
   const messageCountAtScrollRef = useRef(0)
+  const isAtBottomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    return () => {
+      if (isAtBottomTimerRef.current) clearTimeout(isAtBottomTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (sessionId) {
@@ -539,12 +550,13 @@ export default function SessionDetailScreen() {
     void useSessionStore.getState().fetchProviders()
   }, [currentProject, currentServer])
 
-  // Cleanup EventSource on unmount
+  // Cleanup EventSource and abort in-flight requests on unmount
   useEffect(() => {
     return () => {
       closeEventSource()
+      cancelInflight()
     }
-  }, [])
+  }, [closeEventSource, cancelInflight])
 
   // Auto-focus composer when arriving at an empty new session
   useEffect(() => {
@@ -567,11 +579,18 @@ export default function SessionDetailScreen() {
     if (!inputText.trim() || !sessionId || isAgentWorking) {
       return
     }
+    if (!selectedModel) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+      setIsModelPickerOpen(true)
+      return
+    }
 
     const text = inputText.trim()
     setInputText("")
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     void sendPrompt(sessionId, text)
+    // Keep the keyboard up so the user can type their next message immediately.
+    inputRef.current?.focus()
   }
 
   // Newest-first order: the list is visually inverted (scaleY: -1) so index 0
@@ -722,7 +741,11 @@ export default function SessionDetailScreen() {
                 } else if (wasAtBottom && !nowAtBottom) {
                   messageCountAtScrollRef.current = messages.length
                 }
-                setIsAtBottom(nowAtBottom)
+                // Debounce: the "jump to latest" pill flickers during streaming
+                // because content size shifts hover the threshold rapidly.
+                if (isAtBottomTimerRef.current) clearTimeout(isAtBottomTimerRef.current)
+                if (nowAtBottom === isAtBottom) return
+                isAtBottomTimerRef.current = setTimeout(() => setIsAtBottom(nowAtBottom), 150)
               }}
             />
 
@@ -759,14 +782,16 @@ export default function SessionDetailScreen() {
               style={styles.composerInput}
               value={inputText}
               onChangeText={setInputText}
-              onSubmitEditing={handleSend}
               onFocus={() => setIsComposerFocused(true)}
               onBlur={() => setIsComposerFocused(false)}
               placeholder="Type a message..."
               placeholderTextColor={colors.text.weaker}
               selectionColor={colors.interactive.base}
               multiline
-              maxLength={10000}
+              scrollEnabled
+              textAlignVertical="top"
+              blurOnSubmit={false}
+              maxLength={MAX_INPUT_LENGTH}
             />
             <View style={styles.composerBar}>
               <PressableScale
@@ -775,23 +800,32 @@ export default function SessionDetailScreen() {
                   void useSessionStore.getState().fetchProviders()
                   setIsModelPickerOpen(true)
                 }}
+                accessibilityLabel={selectedModel ? `Model: ${modelDisplayName}` : "Model required — tap to choose"}
               >
+                {!selectedModel ? <View style={styles.modelChipDot} /> : null}
                 <Text style={[styles.modelChipText, !selectedModel && styles.modelChipTextEmpty]}>
                   {modelDisplayName}
                 </Text>
                 <Ionicons name="chevron-down" size={10} color={palette.smoke[7]} />
               </PressableScale>
-              {messages.length === 0 && (
-                <Text style={styles.composerHint}>Tip: Use the send button</Text>
-              )}
+              {inputText.length > CHAR_COUNT_THRESHOLD ? (
+                <Text
+                  style={[
+                    styles.composerHint,
+                    inputText.length > MAX_INPUT_LENGTH - 200 && styles.composerHintWarn,
+                  ]}
+                >
+                  {inputText.length}/{MAX_INPUT_LENGTH}
+                </Text>
+              ) : null}
               <View style={{ flex: 1 }} />
               <PressableScale
                 style={[
                   styles.sendButton,
-                  (!inputText.trim() || isAgentWorking) && styles.sendButtonDisabled,
+                  (!inputText.trim() || isAgentWorking || !selectedModel) && styles.sendButtonDisabled,
                 ]}
                 onPress={handleSend}
-                disabled={!inputText.trim() && !isAgentWorking}
+                disabled={!inputText.trim() || isAgentWorking || !selectedModel}
                 accessibilityLabel="Send message"
                 accessibilityRole="button"
               >
@@ -1061,6 +1095,13 @@ const styles = StyleSheet.create({
   modelChipTextEmpty: {
     color: palette.smoke[6],
   },
+  modelChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: palette.solaris[9],
+    marginRight: 2,
+  },
   composerAction: {
     padding: 6,
   },
@@ -1088,6 +1129,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: palette.smoke[5],
     marginLeft: 4,
+    fontVariant: ["tabular-nums"],
+  },
+  composerHintWarn: {
+    color: palette.ember[9],
   },
   // --- Modal ---
   modalBackdrop: {

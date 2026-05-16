@@ -46,6 +46,7 @@ export default function SessionsListScreen() {
   const fetchSessions = useSessionStore((state) => state.fetchSessions)
   const setSession = useSessionStore((state) => state.setSession)
   const deleteSession = useSessionStore((state) => state.deleteSession)
+  const renameSession = useSessionStore((state) => state.renameSession)
   const [refreshing, setRefreshing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -114,15 +115,10 @@ export default function SessionsListScreen() {
       "Rename session",
       undefined,
       (newTitle) => {
-        if (newTitle?.trim()) {
-          const updated = { ...session, title: newTitle.trim() }
-          // Optimistic local update
-          useSessionStore.setState((state) => ({
-            sessions: state.sessions.map((s) => (s.id === session.id ? updated : s)),
-            currentSession:
-              state.currentSession?.id === session.id ? updated : state.currentSession,
-          }))
-        }
+        const trimmed = newTitle?.trim()
+        if (!trimmed) return
+        // renameSession applies an optimistic update internally and rolls back on error.
+        void renameSession(session.id, trimmed)
       },
       "plain-text",
       session.title || ""
@@ -148,11 +144,19 @@ export default function SessionsListScreen() {
     )
   }
 
-  const renderRightActions = () => (
-    <View style={styles.swipeDeleteContainer}>
-      <Ionicons name="trash-outline" size={20} color="#fff" />
-    </View>
-  )
+  const renderDeleteAction = (session: Session, getRef: () => Swipeable | null) => {
+    const DeleteAction = () => (
+      <Pressable
+        style={styles.swipeDeleteContainer}
+        onPress={() => handleDeleteSession(session, getRef())}
+        accessibilityLabel={`Delete ${session.title || "Untitled session"}`}
+        accessibilityRole="button"
+      >
+        <Ionicons name="trash-outline" size={20} color="#fff" />
+      </Pressable>
+    )
+    return DeleteAction
+  }
 
   const projectName =
     currentProject?.name ??
@@ -244,31 +248,34 @@ export default function SessionsListScreen() {
           renderItem={({ item }: { item: Session }) => {
             const isActive = item.id === currentSession?.id
             let swipeableRef: Swipeable | null = null
+            const getRef = () => swipeableRef
             return (
-            <Swipeable
-              ref={(ref) => { swipeableRef = ref }}
-              renderRightActions={renderRightActions}
-              onSwipeableOpen={() => handleDeleteSession(item, swipeableRef)}
-              overshootRight={false}
-            >
-              <PressableScale
-                onPress={() => handleSelectSession(item.id)}
-                onLongPress={() => handleRenameSession(item)}
-                style={[styles.sessionItem, isActive && styles.sessionItemActive]}
-                accessibilityLabel={item.title || "Untitled session"}
-                accessibilityRole="button"
+              <Swipeable
+                ref={(ref) => { swipeableRef = ref }}
+                renderRightActions={renderDeleteAction(item, getRef)}
+                overshootRight={false}
+                friction={2}
+                rightThreshold={64}
               >
-                <View style={styles.sessionInfo}>
-                  <Text style={styles.sessionTitle} numberOfLines={1}>
-                    {item.title || "Untitled session"}
-                  </Text>
-                  <Text style={styles.sessionTime}>
-                    {relativeTime(item.time.updated)}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
-              </PressableScale>
-            </Swipeable>
+                <PressableScale
+                  onPress={() => handleSelectSession(item.id)}
+                  onLongPress={() => handleRenameSession(item)}
+                  style={[styles.sessionItem, isActive && styles.sessionItemActive]}
+                  accessibilityLabel={item.title || "Untitled session"}
+                  accessibilityRole="button"
+                  accessibilityHint="Long-press to rename. Swipe left to delete."
+                >
+                  <View style={styles.sessionInfo}>
+                    <Text style={styles.sessionTitle} numberOfLines={1}>
+                      {item.title || "Untitled session"}
+                    </Text>
+                    <Text style={styles.sessionTime}>
+                      {relativeTime(item.time.updated)}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
+                </PressableScale>
+              </Swipeable>
             )
           }}
         />

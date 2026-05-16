@@ -72,6 +72,10 @@ export type SessionState = {
 
   // Internal: guards stale fetchMessages responses
   _fetchSeq: number
+  // Internal: bumped by cancelInflight() so per-session actions can drop their writes
+  _sessionScope: number
+  // Internal: timestamp of last successful fetchMessages — used to dedupe SSE-reconnect refetches
+  _lastMessagesFetchAt: number
 }
 
 export const initialSessionState: SessionState = {
@@ -100,6 +104,8 @@ export const initialSessionState: SessionState = {
   eventSourceReconnectTimer: undefined,
 
   _fetchSeq: 0,
+  _sessionScope: 0,
+  _lastMessagesFetchAt: 0,
 }
 
 type SessionActions = {
@@ -149,10 +155,12 @@ type SessionActions = {
     reply: "once" | "always" | "reject"
   ) => Promise<boolean>
   deleteSession: (sessionId: string) => Promise<boolean>
+  renameSession: (sessionId: string, title: string) => Promise<boolean>
   shareSession: (sessionId: string) => Promise<Session | undefined>
   unshareSession: (sessionId: string) => Promise<Session | undefined>
   subscribeToEvents: (sessionId?: string) => Promise<void>
   closeEventSource: () => void
+  cancelInflight: () => void
 }
 
 type ResultFields<TData> = {
@@ -576,7 +584,13 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       const prev = get().currentSession
       if (prev?.id !== session?.id) {
         // Clear stale data from previous session
-        set({ currentSession: session, messages: [], messageParts: {}, isAgentWorking: false })
+        set({
+          currentSession: session,
+          messages: [],
+          messageParts: {},
+          isAgentWorking: false,
+          _lastMessagesFetchAt: 0,
+        })
       } else {
         set({ currentSession: session })
       }
@@ -661,8 +675,12 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
+      const scope = get()._sessionScope
       const directory = getSessionDirectory()
       const result = await client.provider.list({ directory })
+
+      if (get()._sessionScope !== scope) return undefined
+
       const data = resolveData(result)
 
       if (!data) {
@@ -745,6 +763,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return
       }
 
+      const scope = get()._sessionScope
       set({ isAgentWorking: true })
 
       try {
@@ -759,6 +778,9 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
           parts,
         })
 
+        // Bail if the screen unmounted (or another scope-cancel happened) during the request.
+        if (get()._sessionScope !== scope) return
+
         const response = resolveData(result)
         if (!response) {
           set({ lastError: "ERR SERVER UNAVAILABLE", isAgentWorking: false })
@@ -767,6 +789,7 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
         // SSE handles message updates — no re-fetch needed
       } catch (error) {
+        if (get()._sessionScope !== scope) return
         set({ lastError: error instanceof Error ? error.message : "ERR SEND FAILED", isAgentWorking: false })
       }
     },
@@ -778,14 +801,15 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
 
       // Increment sequence so earlier in-flight fetches become stale
       const seq = get()._fetchSeq + 1
+      const scope = get()._sessionScope
       set({ _fetchSeq: seq })
 
       const directory = getSessionDirectory()
       const result = await client.session.messages({ sessionID: sessionId, directory })
       const data = resolveData(result)
 
-      // Discard if a newer fetch was started while we were waiting
-      if (get()._fetchSeq !== seq) {
+      // Discard if a newer fetch was started while we were waiting, or the screen unmounted.
+      if (get()._fetchSeq !== seq || get()._sessionScope !== scope) {
         return undefined
       }
 
@@ -800,7 +824,12 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         messageParts[item.info.id] = item.parts
       }
       const sortedMessages = sortMessages(messages)
-      set({ messages: sortedMessages, messageParts, lastError: undefined })
+      set({
+        messages: sortedMessages,
+        messageParts,
+        lastError: undefined,
+        _lastMessagesFetchAt: Date.now(),
+      })
       return sortedMessages
     },
     abortSession: async (sessionId) => {
@@ -865,10 +894,14 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
+      const scope = get()._sessionScope
       set({ isDiffsLoading: true, diffsError: undefined })
 
       const directory = getSessionDirectory()
       const result = await client.session.diff({ sessionID: sessionId, directory })
+
+      if (get()._sessionScope !== scope) return undefined
+
       const diffs = resolveData(result)
 
       if (!diffs) {
@@ -966,6 +999,57 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       }))
 
       return true
+    },
+    renameSession: async (sessionId, title) => {
+      const trimmed = title.trim()
+      if (!trimmed) return false
+
+      const client = ensureClient()
+      if (!client) {
+        return false
+      }
+
+      const before = get().sessions.find((s) => s.id === sessionId)
+      if (!before) return false
+      if (before.title === trimmed) return true
+
+      // Optimistic update.
+      const optimistic = { ...before, title: trimmed }
+      set((state) => ({
+        sessions: state.sessions.map((s) => (s.id === sessionId ? optimistic : s)),
+        currentSession:
+          state.currentSession?.id === sessionId ? optimistic : state.currentSession,
+      }))
+
+      try {
+        const directory = getSessionDirectory()
+        const result = await client.session.update({
+          sessionID: sessionId,
+          directory,
+          title: trimmed,
+        })
+        const updated = resolveData(result)
+        if (!updated) {
+          throw new Error("ERR RENAME FAILED")
+        }
+        set((state) => ({
+          sessions: state.sessions.map((s) => (s.id === sessionId ? updated : s)),
+          currentSession:
+            state.currentSession?.id === sessionId ? updated : state.currentSession,
+          lastError: undefined,
+        }))
+        return true
+      } catch (error) {
+        // Roll back so the user sees the original title rather than a silent lie.
+        set((state) => ({
+          sessions: state.sessions.map((s) => (s.id === sessionId ? before : s)),
+          currentSession:
+            state.currentSession?.id === sessionId ? before : state.currentSession,
+          lastError: error instanceof Error && error.message ? error.message : "ERR RENAME FAILED",
+          errorSeq: state.errorSeq + 1,
+        }))
+        return false
+      }
     },
     shareSession: async (sessionId) => {
       const client = ensureClient()
@@ -1074,9 +1158,11 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
           // incoming SSE events (session.status "busy") will re-set it.
           set({ isEventSourceConnected: true, isAgentWorking: false })
 
-          // Re-fetch messages on reconnect to catch anything missed
+          // Re-fetch messages on reconnect to catch anything missed, but skip if a
+          // mount-driven fetch finished recently — they would otherwise race.
           const currentSessionId = get().eventSessionId ?? get().currentSession?.id
-          if (currentSessionId) {
+          const recentMs = Date.now() - get()._lastMessagesFetchAt
+          if (currentSessionId && recentMs > 3000) {
             void get().fetchMessages(currentSessionId)
           }
         })
@@ -1140,6 +1226,11 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         isEventSourceConnected: false,
         eventSourceReconnectTimer: undefined,
       })
+    },
+    cancelInflight: () => {
+      // Bump the scope token; any in-flight action that captured the previous
+      // value will skip its terminal set() call and avoid writing stale data.
+      set((state) => ({ _sessionScope: state._sessionScope + 1, isAgentWorking: false }))
     },
   }
 })
