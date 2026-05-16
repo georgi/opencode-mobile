@@ -822,11 +822,11 @@ export default function SessionDetailScreen() {
               <PressableScale
                 style={[
                   styles.sendButton,
-                  (!inputText.trim() || isAgentWorking || !selectedModel) && styles.sendButtonDisabled,
+                  (!inputText.trim() || isAgentWorking) && styles.sendButtonDisabled,
                 ]}
                 onPress={handleSend}
-                disabled={!inputText.trim() || isAgentWorking || !selectedModel}
-                accessibilityLabel="Send message"
+                disabled={!inputText.trim() || isAgentWorking}
+                accessibilityLabel={selectedModel ? "Send message" : "Send message (will prompt to choose a model)"}
                 accessibilityRole="button"
               >
                 {isAgentWorking ? (

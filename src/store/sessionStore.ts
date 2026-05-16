@@ -1022,7 +1022,11 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
       }))
 
       try {
-        const directory = getSessionDirectory()
+        // Use the directory of the session being renamed, not the currently
+        // open one — they can differ when the user renames a list row that
+        // belongs to a different worktree/sandbox.
+        const directory =
+          before.directory ?? get().currentProject?.worktree ?? get().currentServer?.directory
         const result = await client.session.update({
           sessionID: sessionId,
           directory,

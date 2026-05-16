@@ -230,6 +230,45 @@ describe("sessionStore", () => {
     expect(useSessionStore.getState().currentSession?.title).toBe("Renamed")
   })
 
+  it("renameSession sends the target session's directory even when a different session is current", async () => {
+    const target: Session = {
+      ...createSession(),
+      id: "session-other",
+      directory: "/other-worktree",
+      title: "Other",
+    }
+    const current: Session = {
+      ...createSession(),
+      id: "session-current",
+      directory: "/main-worktree",
+      title: "Main",
+    }
+    const renamed = { ...target, title: "Renamed" }
+    const update = jest.fn(async () => ({ data: renamed }))
+    const client = { session: { update } } as unknown as OpencodeClient
+
+    useSessionStore.setState({
+      client,
+      sessions: [current, target],
+      currentSession: current,
+      currentServer: {
+        id: "prod",
+        label: "Prod",
+        baseUrl: "https://api.opencode.ai",
+        directory: "/server-dir",
+        basicAuth: "",
+      },
+    })
+
+    await useSessionStore.getState().renameSession(target.id, "Renamed")
+
+    expect(update).toHaveBeenCalledWith({
+      sessionID: target.id,
+      directory: target.directory,
+      title: "Renamed",
+    })
+  })
+
   it("renameSession rolls back the optimistic update on SDK error", async () => {
     const session = createSession()
     const update = jest.fn(async () => {
