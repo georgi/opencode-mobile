@@ -25,6 +25,18 @@ jest.mock("react-native/Libraries/NativeComponent/ViewConfigIgnore", () => {
   }
 })
 
+jest.mock("@expo/vector-icons", () => {
+  const React = require("react")
+  const { View } = require("react-native")
+  const Icon = (props: object) => React.createElement(View, props)
+  return new Proxy(
+    {},
+    {
+      get: () => Icon,
+    }
+  )
+})
+
 jest.mock("expo-haptics", () => ({
   impactAsync: jest.fn(),
   notificationAsync: jest.fn(),
