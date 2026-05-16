@@ -1089,19 +1089,31 @@ describe("sessionStore-coverage", () => {
       expect(useSessionStore.getState().messageParts["msg-1"]).toHaveLength(1)
     })
 
-    it("handles message.part.updated event — new text part with delta", async () => {
+    it("handles message.part.delta event — appends to a new text part", async () => {
       const { dispatch } = await setupSse("session-1")
       useSessionStore.setState({ messageParts: {} })
 
+      // Server first creates the part via message.part.updated, then streams
+      // text via message.part.delta. message.part.updated has no delta field.
       const part = { id: "p1", type: "text", text: "", messageID: "msg-1", sessionID: "session-1" }
-      dispatch({ type: "message.part.updated", properties: { part, delta: "Hello" } })
+      dispatch({ type: "message.part.updated", properties: { part } })
+      dispatch({
+        type: "message.part.delta",
+        properties: {
+          sessionID: "session-1",
+          messageID: "msg-1",
+          partID: "p1",
+          field: "text",
+          delta: "Hello",
+        },
+      })
 
       const parts = useSessionStore.getState().messageParts["msg-1"]
       expect(parts).toHaveLength(1)
       expect((parts[0] as any).text).toBe("Hello")
     })
 
-    it("handles message.part.updated event — existing text part with delta", async () => {
+    it("handles message.part.delta event — appends to an existing text part", async () => {
       const { dispatch } = await setupSse("session-1")
       useSessionStore.setState({
         messageParts: {
@@ -1109,8 +1121,16 @@ describe("sessionStore-coverage", () => {
         },
       })
 
-      const part = { id: "p1", type: "text", text: "", messageID: "msg-1", sessionID: "session-1" }
-      dispatch({ type: "message.part.updated", properties: { part, delta: "lo" } })
+      dispatch({
+        type: "message.part.delta",
+        properties: {
+          sessionID: "session-1",
+          messageID: "msg-1",
+          partID: "p1",
+          field: "text",
+          delta: "lo",
+        },
+      })
 
       const parts = useSessionStore.getState().messageParts["msg-1"]
       expect((parts[0] as any).text).toBe("Hello")

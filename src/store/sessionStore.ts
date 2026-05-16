@@ -357,11 +357,11 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         break
       }
       case "message.part.updated": {
-        const { part, delta } = event.properties
+        const { part } = event.properties
         set((state) => {
           const messageID = part.messageID
           const parts = state.messageParts[messageID] ?? []
-          const updatedParts = upsertPart(parts, part, delta)
+          const updatedParts = upsertPart(parts, part)
           const nextMessageParts = withUpdatedParts(state.messageParts, messageID, updatedParts)
           if (nextMessageParts === state.messageParts) return state
           return { messageParts: nextMessageParts }
