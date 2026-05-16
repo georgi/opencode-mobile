@@ -103,7 +103,7 @@ export default function NotificationsScreen() {
                         </Text>
                         <View style={styles.permissionActions}>
                             <PressableScale
-                                style={[styles.actionButton, isResponding && styles.buttonDisabled]}
+                                style={styles.actionButton}
                                 onPress={() => void handleRespond(permission.id, "once")}
                                 disabled={isResponding}
                                 accessibilityLabel="Allow once"
@@ -112,7 +112,7 @@ export default function NotificationsScreen() {
                                 <Text style={styles.actionButtonText}>Once</Text>
                             </PressableScale>
                             <PressableScale
-                                style={[styles.actionButton, isResponding && styles.buttonDisabled]}
+                                style={styles.actionButton}
                                 onPress={() => void handleRespond(permission.id, "always")}
                                 disabled={isResponding}
                                 accessibilityLabel="Allow always"
@@ -121,7 +121,7 @@ export default function NotificationsScreen() {
                                 <Text style={styles.actionButtonText}>Always</Text>
                             </PressableScale>
                             <PressableScale
-                                style={[styles.rejectButton, isResponding && styles.buttonDisabled]}
+                                style={styles.rejectButton}
                                 onPress={() => void handleRespond(permission.id, "reject")}
                                 disabled={isResponding}
                                 accessibilityLabel="Reject"
@@ -239,9 +239,6 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: "500",
         color: palette.ember[9],
-    },
-    buttonDisabled: {
-        opacity: 0.4,
     },
     respondingRow: {
         flexDirection: "row",
