@@ -3,9 +3,9 @@ import {
     View,
     Text,
     StyleSheet,
-    Pressable,
     ScrollView,
     RefreshControl,
+    ActivityIndicator,
 } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -91,7 +91,9 @@ export default function NotificationsScreen() {
                     <Text style={styles.emptyHint}>Check back when a session needs approval.</Text>
                 </View>
             ) : (
-                pendingPermissions.map((permission) => (
+                pendingPermissions.map((permission) => {
+                    const isResponding = respondingIds.has(permission.id)
+                    return (
                     <View key={permission.id} style={styles.permissionCard}>
                         <Text style={styles.permissionTitle}>
                             {permission.permission}
@@ -101,33 +103,39 @@ export default function NotificationsScreen() {
                         </Text>
                         <View style={styles.permissionActions}>
                             <PressableScale
-                                style={[styles.actionButton]}
+                                style={[styles.actionButton, isResponding && styles.buttonDisabled]}
                                 onPress={() => void handleRespond(permission.id, "once")}
-                                disabled={respondingIds.has(permission.id)}
+                                disabled={isResponding}
                                 accessibilityLabel="Allow once"
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.actionButtonText}>Once</Text>
                             </PressableScale>
                             <PressableScale
-                                style={[styles.actionButton]}
+                                style={[styles.actionButton, isResponding && styles.buttonDisabled]}
                                 onPress={() => void handleRespond(permission.id, "always")}
-                                disabled={respondingIds.has(permission.id)}
+                                disabled={isResponding}
                                 accessibilityLabel="Allow always"
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.actionButtonText}>Always</Text>
                             </PressableScale>
                             <PressableScale
-                                style={[styles.rejectButton]}
+                                style={[styles.rejectButton, isResponding && styles.buttonDisabled]}
                                 onPress={() => void handleRespond(permission.id, "reject")}
-                                disabled={respondingIds.has(permission.id)}
+                                disabled={isResponding}
                                 accessibilityLabel="Reject"
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.rejectButtonText}>Reject</Text>
                             </PressableScale>
                         </View>
+                        {isResponding ? (
+                            <View style={styles.respondingRow}>
+                                <ActivityIndicator size="small" color={palette.smoke[7]} />
+                                <Text style={styles.respondingText}>Sending response…</Text>
+                            </View>
+                        ) : null}
                         <PressableScale
                             onPress={() => {
                                 const found = sessions.find((s) => s.id === permission.sessionID)
@@ -136,11 +144,13 @@ export default function NotificationsScreen() {
                                     sessionId: permission.sessionID,
                                 })
                             }}
+                            hitSlop={8}
                         >
                             <Text style={styles.openSessionText}>Open Session</Text>
                         </PressableScale>
                     </View>
-                ))
+                    )
+                })
             )}
         </ScrollView>
     )
@@ -229,6 +239,19 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: "500",
         color: palette.ember[9],
+    },
+    buttonDisabled: {
+        opacity: 0.4,
+    },
+    respondingRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingVertical: 2,
+    },
+    respondingText: {
+        color: palette.smoke[7],
+        fontSize: 12,
     },
     openSessionText: {
         color: palette.smoke[7],

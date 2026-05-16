@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Pressable,
   ScrollView,
   Alert,
   ActivityIndicator,
@@ -131,6 +130,36 @@ export default function SettingsScreen() {
   const [basicAuth, setBasicAuth] = useState("")
   const [showBasicAuth, setShowBasicAuth] = useState(false)
   const [focusedInput, setFocusedInput] = useState<string | null>(null)
+  type TestStatus = { state: "idle" | "testing" | "ok" | "fail"; latencyMs?: number; error?: string }
+  const [serverTests, setServerTests] = useState<Record<string, TestStatus>>({})
+
+  const testServer = async (server: ServerConfig) => {
+    setServerTests((prev) => ({ ...prev, [server.id]: { state: "testing" } }))
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    const start = Date.now()
+    try {
+      const headers: Record<string, string> = { Accept: "application/json" }
+      if (server.basicAuth) headers.Authorization = `Basic ${server.basicAuth}`
+      const url = `${stripTrailingSlash(server.baseUrl)}/global/health`
+      const res = await fetch(url, { method: "GET", headers, signal: controller.signal })
+      const data = (await res.json().catch(() => null)) as { healthy?: boolean } | null
+      const latencyMs = Date.now() - start
+      if (res.ok && data?.healthy) {
+        setServerTests((prev) => ({ ...prev, [server.id]: { state: "ok", latencyMs } }))
+      } else {
+        setServerTests((prev) => ({
+          ...prev,
+          [server.id]: { state: "fail", error: `HTTP ${res.status}` },
+        }))
+      }
+    } catch (error) {
+      const message = error instanceof Error && error.name === "AbortError" ? "Timeout" : "Unreachable"
+      setServerTests((prev) => ({ ...prev, [server.id]: { state: "fail", error: message } }))
+    } finally {
+      clearTimeout(timer)
+    }
+  }
 
   const scanAbortRef = useRef<AbortController | null>(null)
   const directoryInputRef = useRef<TextInput>(null)
@@ -246,6 +275,7 @@ export default function SettingsScreen() {
           <View style={styles.serverList}>
             {servers.map((server) => {
               const isActive = server.id === currentServerId
+              const status = serverTests[server.id]
               return (
                 <PressableScale
                   key={server.id}
@@ -256,11 +286,28 @@ export default function SettingsScreen() {
                     <View style={styles.serverLabelRow}>
                       {isActive && <View style={styles.activeDot} />}
                       <Text style={styles.serverName}>{server.label}</Text>
+                      {status?.state === "ok" ? (
+                        <Text style={styles.serverStatusOk}>● {status.latencyMs}ms</Text>
+                      ) : status?.state === "fail" ? (
+                        <Text style={styles.serverStatusFail}>● {status.error}</Text>
+                      ) : null}
                     </View>
                     <Text style={styles.serverMeta}>{server.baseUrl}</Text>
                     <Text style={styles.serverMeta}>{server.directory}</Text>
                   </View>
                   <View style={styles.serverActions}>
+                    <PressableScale
+                      hitSlop={8}
+                      onPress={() => void testServer(server)}
+                      accessibilityLabel={`Test connection to ${server.label}`}
+                      accessibilityRole="button"
+                    >
+                      {status?.state === "testing" ? (
+                        <ActivityIndicator size="small" color={palette.smoke[9]} />
+                      ) : (
+                        <Ionicons name="pulse" size={18} color={palette.smoke[9]} />
+                      )}
+                    </PressableScale>
                     <PressableScale
                       hitSlop={8}
                       onPress={() => {
@@ -270,6 +317,8 @@ export default function SettingsScreen() {
                         setDirectory(server.directory)
                         setBasicAuth(server.basicAuth)
                       }}
+                      accessibilityLabel={`Edit ${server.label}`}
+                      accessibilityRole="button"
                     >
                       <Ionicons name="pencil" size={18} color={palette.smoke[9]} />
                     </PressableScale>
@@ -289,6 +338,8 @@ export default function SettingsScreen() {
                           ]
                         )
                       }}
+                      accessibilityLabel={`Remove ${server.label}`}
+                      accessibilityRole="button"
                     >
                       <Ionicons name="trash-outline" size={18} color={palette.ember[9]} />
                     </PressableScale>
@@ -545,6 +596,16 @@ const styles = StyleSheet.create({
   serverMeta: {
     fontSize: 12,
     color: colors.text.weak,
+  },
+  serverStatusOk: {
+    fontSize: 11,
+    color: palette.apple[9],
+    marginLeft: 6,
+  },
+  serverStatusFail: {
+    fontSize: 11,
+    color: palette.ember[9],
+    marginLeft: 6,
   },
   serverActions: {
     flexDirection: "row",

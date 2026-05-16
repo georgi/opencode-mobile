@@ -54,6 +54,8 @@ export type SessionState = {
   selectedModel?: { providerID: string; modelID: string }
   recentModels: { providerID: string; modelID: string }[]
   projects: Project[]
+  isProjectsLoading: boolean
+  isSessionsLoading: boolean
   pendingPermissions: PermissionRequest[]
   isOffline: boolean
   lastError?: string
@@ -88,6 +90,8 @@ export const initialSessionState: SessionState = {
   providers: [],
   recentModels: [],
   projects: [],
+  isProjectsLoading: false,
+  isSessionsLoading: false,
   pendingPermissions: [],
   isOffline: false,
   errorSeq: 0,
@@ -656,17 +660,22 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const directory = get().currentServer?.directory
-      const result = await client.project.list({ directory })
-      const projects = resolveData(result)
+      set({ isProjectsLoading: true })
+      try {
+        const directory = get().currentServer?.directory
+        const result = await client.project.list({ directory })
+        const projects = resolveData(result)
 
-      if (!projects) {
-        set({ lastError: "ERR SERVER UNAVAILABLE" })
-        return undefined
+        if (!projects) {
+          set({ lastError: "ERR SERVER UNAVAILABLE" })
+          return undefined
+        }
+
+        set({ projects, lastError: undefined })
+        return projects
+      } finally {
+        set({ isProjectsLoading: false })
       }
-
-      set({ projects, lastError: undefined })
-      return projects
     },
     selectProject: (project) => set({ currentProject: project }),
     fetchProviders: async () => {
@@ -717,16 +726,21 @@ export const useSessionStore = create<SessionState & SessionActions>((set, get) 
         return undefined
       }
 
-      const result = await client.session.list({ directory: currentProject.worktree })
-      const sessions = resolveData(result)
+      set({ isSessionsLoading: true })
+      try {
+        const result = await client.session.list({ directory: currentProject.worktree })
+        const sessions = resolveData(result)
 
-      if (!sessions) {
-        set({ lastError: "ERR SERVER UNAVAILABLE" })
-        return undefined
+        if (!sessions) {
+          set({ lastError: "ERR SERVER UNAVAILABLE" })
+          return undefined
+        }
+
+        set({ sessions, lastError: undefined })
+        return sessions
+      } finally {
+        set({ isSessionsLoading: false })
       }
-
-      set({ sessions, lastError: undefined })
-      return sessions
     },
     createSession: async (options) => {
       const client = ensureClient()

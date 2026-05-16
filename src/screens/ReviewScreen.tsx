@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { View, Text, StyleSheet, Pressable, RefreshControl, Platform, ScrollView } from "react-native"
+import { View, Text, StyleSheet, RefreshControl, Platform, ScrollView } from "react-native"
 import { FlashList } from "@shopify/flash-list"
 import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
