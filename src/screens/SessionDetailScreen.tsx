@@ -8,6 +8,7 @@ import {
   Pressable,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ActivityIndicator,
   Modal,
@@ -93,6 +94,15 @@ const markdownRules = {
   code_block: (node: any, _children: any, _parent: any, styles: any) => (
     <CodeBlockWithCopy key={node.key} node={node} styles={styles} />
   ),
+}
+
+// react-native-markdown-display does not open links by default; the caller
+// must hand it a handler. Returning true tells the library "I handled it".
+const handleMarkdownLink = (url: string): boolean => {
+  void Linking.openURL(url).catch(() => {
+    /* invalid scheme or no installed handler — swallow silently */
+  })
+  return true
 }
 
 function formatTimestamp(timestamp: number): string {
@@ -330,7 +340,7 @@ const MessageRow = React.memo(function MessageRow({
       {segments.map((seg, i) => {
         if (seg.type === "text") {
           return (
-            <Markdown key={i} style={markdownStyles} rules={markdownRules}>
+            <Markdown key={i} style={markdownStyles} rules={markdownRules} onLinkPress={handleMarkdownLink}>
               {seg.text}
             </Markdown>
           )
@@ -706,6 +716,9 @@ export default function SessionDetailScreen() {
             </Text>
             <Text style={styles.emptyStateHint}>
               Type a message below to get started.
+            </Text>
+            <Text style={styles.emptyStateHint}>
+              Tip: long-press any message to copy it.
             </Text>
           </View>
         ) : (

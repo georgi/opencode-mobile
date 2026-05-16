@@ -132,6 +132,14 @@ export default function SettingsScreen() {
   const [focusedInput, setFocusedInput] = useState<string | null>(null)
   type TestStatus = { state: "idle" | "testing" | "ok" | "fail"; latencyMs?: number; error?: string }
   const [serverTests, setServerTests] = useState<Record<string, TestStatus>>({})
+  const [savedFlash, setSavedFlash] = useState<"created" | "updated" | null>(null)
+  const savedFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (savedFlashTimerRef.current) clearTimeout(savedFlashTimerRef.current)
+    }
+  }, [])
 
   const testServer = async (server: ServerConfig) => {
     setServerTests((prev) => ({ ...prev, [server.id]: { state: "testing" } }))
@@ -227,6 +235,7 @@ export default function SettingsScreen() {
     setDirectoryError("")
 
     const id = editingServerId ?? uuidv4()
+    const wasEdit = Boolean(editingServerId)
     const server: ServerConfig = {
       id,
       label: label.trim(),
@@ -242,6 +251,11 @@ export default function SettingsScreen() {
     setDirectory("")
     setBasicAuth("")
     setShowBasicAuth(false)
+
+    // Brief inline confirmation; auto-dismiss after a few seconds.
+    setSavedFlash(wasEdit ? "updated" : "created")
+    if (savedFlashTimerRef.current) clearTimeout(savedFlashTimerRef.current)
+    savedFlashTimerRef.current = setTimeout(() => setSavedFlash(null), 2500)
   }
 
   return (
@@ -466,6 +480,14 @@ export default function SettingsScreen() {
         >
           <Text style={styles.saveText}>{editingServerId ? "Update Server" : "Save Server"}</Text>
         </PressableScale>
+        {savedFlash ? (
+          <View style={styles.savedFlash} accessibilityLiveRegion="polite">
+            <Ionicons name="checkmark-circle" size={14} color={palette.apple[9]} />
+            <Text style={styles.savedFlashText}>
+              {savedFlash === "created" ? "Server saved" : "Server updated"}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {editingServerId ? (
@@ -702,6 +724,18 @@ const styles = StyleSheet.create({
   saveText: {
     color: palette.smoke[1],
     fontWeight: "600",
+  },
+  savedFlash: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: 4,
+  },
+  savedFlashText: {
+    color: palette.apple[9],
+    fontSize: 12,
+    fontWeight: "500",
   },
   cancelButton: {
     paddingVertical: 12,
