@@ -527,6 +527,8 @@ export default function SessionDetailScreen() {
   const inputRef = useRef<TextInput>(null)
   const messageCountAtScrollRef = useRef(0)
   const isAtBottomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isAtBottomRef = useRef(true)
+  const prevMessageCountRef = useRef(messages.length)
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
@@ -574,6 +576,20 @@ export default function SessionDetailScreen() {
       messageCountAtScrollRef.current = messages.length
     }
   }, [messages.length, isAtBottom])
+
+  // Autoscroll: when pinned at the bottom, keep the latest message in view as
+  // new ones arrive. Reads a ref (not the debounced state) for the live position.
+  useEffect(() => {
+    if (messages.length !== prevMessageCountRef.current) {
+      prevMessageCountRef.current = messages.length
+      if (isAtBottomRef.current) {
+        // rAF lets FlashList lay out the new row before we pin to offset 0.
+        requestAnimationFrame(() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: false })
+        })
+      }
+    }
+  }, [messages.length])
 
   const handleSend = () => {
     if (!inputText.trim() || !sessionId || isAgentWorking) {
@@ -730,10 +746,13 @@ export default function SessionDetailScreen() {
               contentContainerStyle={styles.messagesList}
               // Visually invert: newest (index 0) renders at the bottom
               style={styles.invertedList}
+              scrollEventThrottle={64}
               onScroll={(event) => {
                 const offsetY = event.nativeEvent.contentOffset.y
                 const wasAtBottom = isAtBottom
                 const nowAtBottom = offsetY < 32
+                // Live bottom position for autoscroll (every event, not debounced)
+                isAtBottomRef.current = nowAtBottom
                 // In an inverted list, offset 0 = bottom (newest messages)
                 if (!wasAtBottom && nowAtBottom) {
                   setUnreadCount(0)

@@ -154,7 +154,7 @@ export default function SessionsListScreen() {
         accessibilityLabel={`Delete ${session.title || "Untitled session"}`}
         accessibilityRole="button"
       >
-        <Ionicons name="trash-outline" size={20} color="#fff" />
+        <Ionicons name="trash-outline" size={20} color={palette.smoke[12]} />
       </Pressable>
     )
     return DeleteAction
@@ -270,9 +270,12 @@ export default function SessionsListScreen() {
                   accessibilityHint="Long-press to rename. Swipe left to delete."
                 >
                   <View style={styles.sessionInfo}>
-                    <Text style={styles.sessionTitle} numberOfLines={1}>
-                      {item.title || "Untitled session"}
-                    </Text>
+                    <View style={styles.sessionTitleRow}>
+                      {isActive && <View style={styles.activeDot} />}
+                      <Text style={styles.sessionTitle} numberOfLines={1}>
+                        {item.title || "Untitled session"}
+                      </Text>
+                    </View>
                     <Text style={styles.sessionTime}>
                       {relativeTime(item.time.updated)}
                     </Text>
@@ -405,20 +408,29 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: palette.smoke[2],
     marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: "transparent",
   },
   sessionItemActive: {
     backgroundColor: palette.smoke[3],
-    borderLeftColor: palette.smoke[10],
   },
   sessionInfo: {
     flex: 1,
+  },
+  sessionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: palette.lilac[9],
   },
   sessionTitle: {
     fontSize: 14,
     fontWeight: "500",
     color: palette.smoke[11],
+    flexShrink: 1,
   },
   sessionTime: {
     fontSize: 12,
