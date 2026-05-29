@@ -441,11 +441,9 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     backgroundColor: palette.smoke[3],
-    borderLeftWidth: 3,
-    borderLeftColor: "transparent",
   },
   serverItemActive: {
-    borderLeftColor: palette.lilac[9],
+    backgroundColor: palette.smoke[4],
   },
   serverInfo: {
     flex: 1,

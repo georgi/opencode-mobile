@@ -159,11 +159,11 @@ const styles = StyleSheet.create({
     maxWidth: 280,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: palette.lilac[8],
+    backgroundColor: palette.smoke[10],
     alignItems: "center",
   },
   welcomeButtonText: {
-    color: "#fff",
+    color: palette.smoke[1],
     fontSize: 16,
     fontWeight: "600",
   },

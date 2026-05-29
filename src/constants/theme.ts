@@ -136,7 +136,7 @@ export const colors = {
     weak: palette.smoke[9],
     weaker: palette.smoke[7],
     strong: palette.smoke[12],
-    invert: palette.smoke[12], // Use white/light text for inverted surfaces (filled buttons/bubbles)
+    invert: palette.smoke[1], // Dark text for light filled surfaces (e.g. neutral buttons on interactive gray)
   },
 
   // Interactive

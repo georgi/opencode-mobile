@@ -97,7 +97,7 @@ const badgeStyles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   badgeText: {
-    color: "#fff",
+    color: palette.smoke[12],
     fontSize: 10,
     fontWeight: "700",
   },
