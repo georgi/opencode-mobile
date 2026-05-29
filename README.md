@@ -70,5 +70,6 @@ The client persists saved servers and the current selection.
 - `src/utils` - shared helpers
 
 ## References
-- `DESIGN.md` - architecture, flows, and UI behaviors
+- `ARCHITECTURE.md` - architecture, flows, and UI behaviors
+- `DESIGN.md` - visual system: color, typography, components, layout
 - `spec.expo-client.md` - invariants, error strings, and test gates

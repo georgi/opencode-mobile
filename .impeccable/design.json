@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-29T00:00:00Z",
+  "title": "Design System: OpenCode Touch Client",
+  "extensions": {
+    "colorMeta": {
+      "surface-base": {
+        "role": "neutral",
+        "displayName": "Warm Char",
+        "canonical": "#0a0706",
+        "tonalRamp": ["#0a0706", "#191514", "#221e1d", "#393433", "#6d6867", "#969190", "#c8c3c1", "#f6f0ef"]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Lamplight Lilac",
+        "canonical": "#edb2f1",
+        "tonalRamp": ["#0f090f", "#221523", "#2e1d30", "#533655", "#8f6192", "#edb2f1", "#cd99d0", "#fedaff"]
+      },
+      "success": {
+        "role": "status",
+        "displayName": "Signal Green",
+        "canonical": "#12c905",
+        "tonalRamp": ["#030f03", "#012200", "#004100", "#006d00", "#009000", "#12c905", "#43ce3b", "#adffa5"]
+      },
+      "warning": {
+        "role": "status",
+        "displayName": "Amber",
+        "canonical": "#fcd53a",
+        "tonalRamp": ["#0f0b02", "#221a00", "#413100", "#6d5500", "#907100", "#fcd53a", "#cdab19", "#fee79a"]
+      },
+      "danger": {
+        "role": "status",
+        "displayName": "Alert Ember",
+        "canonical": "#fc533a",
+        "tonalRamp": ["#160604", "#320c07", "#5d160c", "#992d1d", "#c73d29", "#fc533a", "#ff785f", "#ffc8b4"]
+      },
+      "diff-add": {
+        "role": "status",
+        "displayName": "Muted Sage",
+        "canonical": "#8ebc8a",
+        "tonalRamp": ["#080d07", "#121e12", "#243922", "#41623f", "#578154", "#8ebc8a", "#b8eeb4", "#d2f2cf"]
+      },
+      "diff-remove": {
+        "role": "status",
+        "displayName": "Soft Ember",
+        "canonical": "#ff785f",
+        "tonalRamp": ["#160604", "#320c07", "#5d160c", "#992d1d", "#c73d29", "#fc533a", "#ff785f", "#ffc8b4"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Screen titles and the top heading inside rendered markdown." },
+      "title": { "displayName": "Title", "purpose": "Nav header titles, modal/sheet titles." },
+      "body": { "displayName": "Body", "purpose": "The default: messages, inputs, list titles, markdown body." },
+      "label": { "displayName": "Label", "purpose": "Uppercase tracked section headers above cards." },
+      "mono": { "displayName": "Mono", "purpose": "Literal machine text: code, diffs, tool names, server addresses." },
+      "caption": { "displayName": "Caption", "purpose": "Timestamps, hints, sublabels; the quietest text." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "press-scale", "value": "transform: scale(0.97); transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Universal touch feedback (PressableScale): spring to 0.97 with zero bounce." },
+      { "name": "ease-out", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Default easing. Exponential ease-out; never bounce or elastic." },
+      { "name": "copy-confirm", "value": "2000ms", "purpose": "How long a copy affordance shows its checkmark before reverting." },
+      { "name": "error-autodismiss", "value": "5000ms", "purpose": "How long the inline error banner stays before auto-clearing." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Quiet neutral action. Interactive Gray fill with dark Warm Char text; never the accent. Dark text is required for AA contrast on the gray.",
+      "html": "<button class='ds-btn-primary'>Save Server</button>",
+      "css": ".ds-btn-primary{background:#969190;color:#0a0706;font-size:14px;font-weight:600;padding:12px 16px;border:none;border-radius:10px;cursor:pointer;transition:transform .12s cubic-bezier(.22,1,.36,1),opacity .12s;} .ds-btn-primary:hover{opacity:.92;} .ds-btn-primary:active{transform:scale(.97);} .ds-btn-primary:disabled{opacity:.5;}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Overlay Char fill, transparent 1px border that becomes Lamplight Lilac on focus. No glow.",
+      "html": "<input class='ds-input' placeholder='Base URL' />",
+      "css": ".ds-input{background:#191514;color:#c8c3c1;font-size:14px;padding:10px 12px;border:1px solid transparent;border-radius:10px;outline:none;width:240px;} .ds-input::placeholder{color:#4b4646;} .ds-input:focus{border-color:#edb2f1;}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Raised Char surface, no border, no shadow. Grouped under an uppercase Label.",
+      "html": "<div class='ds-card-group'><div class='ds-card-label'>Connection</div><div class='ds-card'>api.opencode.ai</div></div>",
+      "css": ".ds-card-group{width:260px;} .ds-card-label{font-size:12px;font-weight:500;letter-spacing:1px;text-transform:uppercase;color:#4b4646;margin-bottom:8px;} .ds-card{background:#100c0c;border-radius:12px;padding:14px;color:#c8c3c1;font-size:14px;}"
+    },
+    {
+      "name": "Session List Item",
+      "kind": "list",
+      "refersTo": "list-item",
+      "description": "Raised Char row, press-scale on touch. Active state is a tonal step up plus a status dot (no left stripe).",
+      "html": "<div class='ds-list-item'><div class='ds-list-info'><div class='ds-list-title'>Refactor auth module</div><div class='ds-list-meta'>2h ago</div></div><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#393433' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18l6-6-6-6'/></svg></div>",
+      "css": ".ds-list-item{display:flex;align-items:center;gap:8px;background:#100c0c;border-radius:12px;padding:12px;width:260px;transition:transform .12s cubic-bezier(.22,1,.36,1);} .ds-list-item:active{transform:scale(.97);} .ds-list-info{flex:1;} .ds-list-title{color:#c8c3c1;font-size:14px;font-weight:500;} .ds-list-meta{color:#393433;font-size:12px;margin-top:2px;}"
+    },
+    {
+      "name": "User Bubble",
+      "kind": "custom",
+      "refersTo": "bubble-user",
+      "description": "The only contained message. Overlay Char, 18px radius with a 4px bottom-right tail, right-aligned. Assistant output is unboxed.",
+      "html": "<div style='display:flex;justify-content:flex-end;width:280px;'><div class='ds-bubble-user'>Refactor the auth module to use the new token store</div></div>",
+      "css": ".ds-bubble-user{max-width:80%;background:#191514;color:#c8c3c1;font-size:14px;line-height:20px;padding:10px 14px;border-radius:18px;border-bottom-right-radius:4px;}"
+    },
+    {
+      "name": "Send Button",
+      "kind": "button",
+      "refersTo": "send-button",
+      "description": "Circular icon action, Interactive Gray with a dark arrow. Drops to 0.3 opacity when disabled.",
+      "html": "<button class='ds-send' aria-label='Send'><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#0a0706' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 19V5'/><path d='M5 12l7-7 7 7'/></svg></button>",
+      "css": ".ds-send{width:44px;height:44px;border-radius:999px;background:#969190;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s cubic-bezier(.22,1,.36,1);} .ds-send:active{transform:scale(.97);} .ds-send:disabled{opacity:.3;}"
+    },
+    {
+      "name": "Tool Call Row",
+      "kind": "custom",
+      "refersTo": "tool-row",
+      "description": "Quiet mono row in the assistant stream: chevron, tool name, optional title. Tappable to open a detail sheet.",
+      "html": "<div class='ds-tool-row'><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#7e7978' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18l6-6-6-6'/></svg><span class='ds-tool-name'>read</span><span class='ds-tool-title'>src/constants/theme.ts</span></div>",
+      "css": ".ds-tool-row{display:flex;align-items:center;gap:4px;padding:3px 0;width:280px;} .ds-tool-name{font-family:Menlo,monospace;font-size:12px;color:#7e7978;} .ds-tool-title{font-size:12px;color:#6d6867;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}"
+    },
+    {
+      "name": "Diff Lines",
+      "kind": "custom",
+      "refersTo": "diff-line",
+      "description": "Monospace diff with a prefix gutter and washed backgrounds. Added uses Sage Wash, removed uses Ember Wash.",
+      "html": "<div class='ds-diff'><div class='ds-diff-add'><span class='ds-diff-g'>+</span><span>  const theme = useTheme()</span></div><div class='ds-diff-del'><span class='ds-diff-g'>-</span><span>  const theme = legacyTheme</span></div></div>",
+      "css": ".ds-diff{font-family:Menlo,monospace;font-size:11px;line-height:16px;width:280px;border-radius:8px;overflow:hidden;} .ds-diff-add,.ds-diff-del{display:flex;} .ds-diff-add{background:#192918;color:#d2f2cf;} .ds-diff-del{background:#440e07;color:#ffc8b4;} .ds-diff-g{width:24px;text-align:center;opacity:.7;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Reading Room",
+    "overview": "A quiet, warm, low-lit room where you go to read and judge work that was done elsewhere. The agent's output is the hero on the page; the application is the lamp and the desk, not the subject. Everything is rendered with native-iOS precision (the lineage is Things and Ivory), so the calm never reads as unfinished. The single soft lilac in the system is the reading lamp: it appears only where your attention currently rests. The surface is warm-dark and never black; depth is built from four tonal steps, not shadows. Monospace is reserved strictly for literal machine text so that 'this is the machine talking' is legible at a glance. This system rejects the generic developer-tool look: no default dev-tool blue, no neon hacker green-on-black, no enterprise-SaaS chrome.",
+    "keyCharacteristics": [
+      "Warm-dark, never black: a four-step tonal system anchored at warm char (#0a0706).",
+      "One accent, rationed: Lamplight Lilac (#edb2f1) for focus and active state only.",
+      "Flat by design: depth comes from tone, never from shadow.",
+      "The work unboxed: assistant output and diffs get the full canvas; only the user's own messages are contained.",
+      "Tactile but quiet motion: a single press-scale spring, no bounce.",
+      "Native posture: system type, platform gestures, safe-area aware, 44px touch targets."
+    ],
+    "rules": [
+      { "name": "The One Lamp Rule", "body": "Lamplight Lilac is reserved for focus and active/selected state. Never a button fill, never a heading color, never decoration.", "section": "colors" },
+      { "name": "The Warm Char Rule", "body": "Never #000 or #fff. The floor is Warm Char (#0a0706) and the ceiling is Warm Paper (#f6f0ef). Every neutral is tinted warm.", "section": "colors" },
+      { "name": "The Mono-for-Truth Rule", "body": "Monospace means literal machine text: code, diffs, tool names, addresses. Never UI chrome; never System sans for code.", "section": "typography" },
+      { "name": "The Flat, Tonal Rule", "body": "Never add a shadow to create depth. Move up the tonal ladder, or draw a hairline border.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do reserve Lamplight Lilac (#edb2f1) for focus rings and active/selected state. A handful of lit elements per screen, no more.",
+      "Do render assistant output and diffs unboxed and full-width; contain only the user's own messages.",
+      "Do build depth from the four warm tonal steps (#0a0706, #100c0c, #191514, #221e1d), reaching for a hairline border before anything heavier.",
+      "Do use monospace strictly for literal machine text: code, diffs, tool names, server addresses.",
+      "Do give every interactive element the press-scale spring (to 0.97, no bounce) and a 44px touch target.",
+      "Do keep status meaning multi-channel: pair every status color with an icon or label.",
+      "Do keep body text at Ash (#c8c3c1) or lighter on dark surfaces so it clears 4.5:1 contrast."
+    ],
+    "donts": [
+      "Don't use a border-left or border-right thicker than 1px as a colored accent stripe on list items or cards.",
+      "Don't fill primary buttons with the accent. Lilac is state, not a button color.",
+      "Don't use #fff or #000. Use Warm Paper (#f6f0ef) and Warm Char (#0a0706).",
+      "Don't put light text (#f6f0ef) on Interactive Gray (#969190); it fails AA. Use dark Warm Char text.",
+      "Don't reach for default dev-tool blue (VS Code / GitHub). Cobalt was retired on purpose.",
+      "Don't use neon hacker green-on-black. Greens are Muted Sage and Signal Green, never #00ff00.",
+      "Don't build enterprise-SaaS chrome: no nested cards, no dense dashboards, no busy toolbars.",
+      "Don't add drop shadows to fake elevation; move up the tonal ladder instead.",
+      "Don't default to a Modal. Prefer a bottom sheet or inline disclosure."
+    ]
+  }
+}
