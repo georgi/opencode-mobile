@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Pressable,
   ScrollView,
   Alert,
   ActivityIndicator,
@@ -20,7 +19,35 @@ type DiscoveredServer = {
   host: string
   port: number
   address: string
+  /** Set when the LAN scan got a healthy response from /global/health. */
+  healthy: boolean
 }
+
+/** Wrap raw IPv6 hosts in brackets so `new URL()` can parse them. */
+const bracketIpv6Host = (input: string): string => {
+  try {
+    const match = input.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/(.+)$/)
+    if (!match) return input
+    const [, scheme, rest] = match
+    // If the host is already bracketed, leave it alone.
+    if (rest.startsWith("[")) return input
+    // IPv6 hosts contain two or more colons in the authority component.
+    const authorityEnd = rest.search(/[/?#]/)
+    const authority = authorityEnd === -1 ? rest : rest.slice(0, authorityEnd)
+    const tail = authorityEnd === -1 ? "" : rest.slice(authorityEnd)
+    const lastColon = authority.lastIndexOf(":")
+    const looksLikePort = lastColon !== -1 && /^\d+$/.test(authority.slice(lastColon + 1))
+    const hostPart = looksLikePort ? authority.slice(0, lastColon) : authority
+    const portPart = looksLikePort ? authority.slice(lastColon) : ""
+    if ((hostPart.match(/:/g) ?? []).length < 2) return input
+    return `${scheme}://[${hostPart}]${portPart}${tail}`
+  } catch {
+    return input
+  }
+}
+
+/** Strip a single trailing slash so the URL doesn't double-slash at concat sites. */
+const stripTrailingSlash = (url: string): string => url.replace(/\/+$/, "")
 
 const SCAN_PORTS = [4096, 4097, 4098, 4099, 4100]
 const SCAN_CONCURRENCY = 20
@@ -47,6 +74,7 @@ async function scanSubnet(
                 host,
                 port,
                 address: host,
+                healthy: true,
               })
             }
           })
@@ -98,8 +126,40 @@ export default function SettingsScreen() {
   const [baseUrl, setBaseUrl] = useState(defaultBaseUrl)
   const [baseUrlError, setBaseUrlError] = useState("")
   const [directory, setDirectory] = useState("")
+  const [directoryError, setDirectoryError] = useState("")
   const [basicAuth, setBasicAuth] = useState("")
+  const [showBasicAuth, setShowBasicAuth] = useState(false)
   const [focusedInput, setFocusedInput] = useState<string | null>(null)
+  type TestStatus = { state: "idle" | "testing" | "ok" | "fail"; latencyMs?: number; error?: string }
+  const [serverTests, setServerTests] = useState<Record<string, TestStatus>>({})
+
+  const testServer = async (server: ServerConfig) => {
+    setServerTests((prev) => ({ ...prev, [server.id]: { state: "testing" } }))
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    const start = Date.now()
+    try {
+      const headers: Record<string, string> = { Accept: "application/json" }
+      if (server.basicAuth) headers.Authorization = `Basic ${server.basicAuth}`
+      const url = `${stripTrailingSlash(server.baseUrl)}/global/health`
+      const res = await fetch(url, { method: "GET", headers, signal: controller.signal })
+      const data = (await res.json().catch(() => null)) as { healthy?: boolean } | null
+      const latencyMs = Date.now() - start
+      if (res.ok && data?.healthy) {
+        setServerTests((prev) => ({ ...prev, [server.id]: { state: "ok", latencyMs } }))
+      } else {
+        setServerTests((prev) => ({
+          ...prev,
+          [server.id]: { state: "fail", error: `HTTP ${res.status}` },
+        }))
+      }
+    } catch (error) {
+      const message = error instanceof Error && error.name === "AbortError" ? "Timeout" : "Unreachable"
+      setServerTests((prev) => ({ ...prev, [server.id]: { state: "fail", error: message } }))
+    } finally {
+      clearTimeout(timer)
+    }
+  }
 
   const scanAbortRef = useRef<AbortController | null>(null)
   const directoryInputRef = useRef<TextInput>(null)
@@ -130,14 +190,25 @@ export default function SettingsScreen() {
 
   const canSave = label.trim().length > 0 && baseUrl.trim().length > 0 && directory.trim().length > 0
 
+  const validateDirectory = (value: string): string => {
+    const trimmed = value.trim()
+    if (!trimmed) return "Directory is required"
+    const isAbsolute = trimmed.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmed)
+    if (!isAbsolute) return "Directory must be an absolute path"
+    if (trimmed.split(/[\\/]/).some((segment) => segment === "..")) {
+      return "Directory cannot contain '..' segments"
+    }
+    return ""
+  }
+
   const handleSave = async () => {
     if (!canSave) {
       return
     }
 
-    const trimmedUrl = baseUrl.trim()
+    const normalizedUrl = stripTrailingSlash(bracketIpv6Host(baseUrl.trim()))
     try {
-      const parsed = new URL(trimmedUrl)
+      const parsed = new URL(normalizedUrl)
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         setBaseUrlError("URL must start with http:// or https://")
         return
@@ -148,11 +219,18 @@ export default function SettingsScreen() {
     }
     setBaseUrlError("")
 
+    const directoryValidationError = validateDirectory(directory)
+    if (directoryValidationError) {
+      setDirectoryError(directoryValidationError)
+      return
+    }
+    setDirectoryError("")
+
     const id = editingServerId ?? uuidv4()
     const server: ServerConfig = {
       id,
       label: label.trim(),
-      baseUrl: trimmedUrl as `${string}://${string}`,
+      baseUrl: normalizedUrl as `${string}://${string}`,
       directory: directory.trim(),
       basicAuth,
     }
@@ -163,6 +241,7 @@ export default function SettingsScreen() {
     setLabel("")
     setDirectory("")
     setBasicAuth("")
+    setShowBasicAuth(false)
   }
 
   return (
@@ -196,6 +275,7 @@ export default function SettingsScreen() {
           <View style={styles.serverList}>
             {servers.map((server) => {
               const isActive = server.id === currentServerId
+              const status = serverTests[server.id]
               return (
                 <PressableScale
                   key={server.id}
@@ -206,11 +286,28 @@ export default function SettingsScreen() {
                     <View style={styles.serverLabelRow}>
                       {isActive && <View style={styles.activeDot} />}
                       <Text style={styles.serverName}>{server.label}</Text>
+                      {status?.state === "ok" ? (
+                        <Text style={styles.serverStatusOk}>● {status.latencyMs}ms</Text>
+                      ) : status?.state === "fail" ? (
+                        <Text style={styles.serverStatusFail}>● {status.error}</Text>
+                      ) : null}
                     </View>
                     <Text style={styles.serverMeta}>{server.baseUrl}</Text>
                     <Text style={styles.serverMeta}>{server.directory}</Text>
                   </View>
                   <View style={styles.serverActions}>
+                    <PressableScale
+                      hitSlop={8}
+                      onPress={() => void testServer(server)}
+                      accessibilityLabel={`Test connection to ${server.label}`}
+                      accessibilityRole="button"
+                    >
+                      {status?.state === "testing" ? (
+                        <ActivityIndicator size="small" color={palette.smoke[9]} />
+                      ) : (
+                        <Ionicons name="pulse" size={18} color={palette.smoke[9]} />
+                      )}
+                    </PressableScale>
                     <PressableScale
                       hitSlop={8}
                       onPress={() => {
@@ -220,6 +317,8 @@ export default function SettingsScreen() {
                         setDirectory(server.directory)
                         setBasicAuth(server.basicAuth)
                       }}
+                      accessibilityLabel={`Edit ${server.label}`}
+                      accessibilityRole="button"
                     >
                       <Ionicons name="pencil" size={18} color={palette.smoke[9]} />
                     </PressableScale>
@@ -239,6 +338,8 @@ export default function SettingsScreen() {
                           ]
                         )
                       }}
+                      accessibilityLabel={`Remove ${server.label}`}
+                      accessibilityRole="button"
                     >
                       <Ionicons name="trash-outline" size={18} color={palette.ember[9]} />
                     </PressableScale>
@@ -270,14 +371,21 @@ export default function SettingsScreen() {
                 setLabel(server.name.replace("opencode-", "opencode "))
                 setBaseUrl(`http://${server.address}:${server.port}`)
                 setDirectory("")
+                setDirectoryError("")
                 setBasicAuth("")
+                setShowBasicAuth(false)
                 setEditingServerId(undefined)
                 setTimeout(() => directoryInputRef.current?.focus(), 100)
               }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.discoveredName}>{server.name}</Text>
-                <Text style={styles.discoveredAddress}>{server.address}:{server.port}</Text>
+                <View style={styles.discoveredNameRow}>
+                  <Text style={styles.discoveredName}>{server.name}</Text>
+                  {server.healthy ? (
+                    <Ionicons name="checkmark-circle" size={12} color={palette.apple[9]} />
+                  ) : null}
+                </View>
+                <Text style={styles.discoveredAddress}>http://{server.address}:{server.port}</Text>
               </View>
               <Ionicons name="add-circle-outline" size={20} color={palette.smoke[7]} />
             </PressableScale>
@@ -318,24 +426,39 @@ export default function SettingsScreen() {
           ref={directoryInputRef}
           style={[styles.input, focusedInput === "directory" && styles.inputFocused]}
           value={directory}
-          onChangeText={setDirectory}
+          onChangeText={(text) => {
+            setDirectory(text)
+            if (directoryError) setDirectoryError("")
+          }}
           onFocus={() => setFocusedInput("directory")}
           onBlur={() => setFocusedInput(null)}
-          placeholder="Directory"
+          placeholder="Directory (absolute path)"
           placeholderTextColor={palette.smoke[7]}
           autoCapitalize="none"
         />
-        <TextInput
-          style={[styles.input, focusedInput === "basicAuth" && styles.inputFocused]}
-          value={basicAuth}
-          onChangeText={setBasicAuth}
-          onFocus={() => setFocusedInput("basicAuth")}
-          onBlur={() => setFocusedInput(null)}
-          placeholder="Basic auth token"
-          placeholderTextColor={palette.smoke[7]}
-          autoCapitalize="none"
-          secureTextEntry
-        />
+        {directoryError ? <Text style={styles.baseUrlError}>{directoryError}</Text> : null}
+        <View style={[styles.inputRow, focusedInput === "basicAuth" && styles.inputFocused]}>
+          <TextInput
+            style={styles.inputRowField}
+            value={basicAuth}
+            onChangeText={setBasicAuth}
+            onFocus={() => setFocusedInput("basicAuth")}
+            onBlur={() => setFocusedInput(null)}
+            placeholder="Basic auth token"
+            placeholderTextColor={palette.smoke[7]}
+            autoCapitalize="none"
+            secureTextEntry={!showBasicAuth}
+          />
+          <PressableScale
+            onPress={() => setShowBasicAuth((v) => !v)}
+            hitSlop={8}
+            accessibilityLabel={showBasicAuth ? "Hide basic auth token" : "Show basic auth token"}
+            accessibilityRole="button"
+            style={styles.inputRowIcon}
+          >
+            <Ionicons name={showBasicAuth ? "eye-off" : "eye"} size={18} color={palette.smoke[7]} />
+          </PressableScale>
+        </View>
         <PressableScale
           onPress={() => void handleSave()}
           style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
@@ -351,8 +474,11 @@ export default function SettingsScreen() {
             setEditingServerId(undefined)
             setLabel("")
             setBaseUrl(defaultBaseUrl)
+            setBaseUrlError("")
             setDirectory("")
+            setDirectoryError("")
             setBasicAuth("")
+            setShowBasicAuth(false)
           }}
           style={styles.cancelButton}
         >
@@ -469,6 +595,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.text.weak,
   },
+  serverStatusOk: {
+    fontSize: 11,
+    color: palette.apple[9],
+    marginLeft: 6,
+  },
+  serverStatusFail: {
+    fontSize: 11,
+    color: palette.ember[9],
+    marginLeft: 6,
+  },
   serverActions: {
     flexDirection: "row",
     gap: 16,
@@ -493,6 +629,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: palette.smoke[3],
     gap: 8,
+  },
+  discoveredNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   discoveredName: {
     fontSize: 14,
@@ -523,6 +664,24 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderColor: palette.lilac[9],
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 10,
+    backgroundColor: palette.smoke[3],
+    borderWidth: 1,
+    borderColor: "transparent",
+    paddingRight: 8,
+  },
+  inputRowField: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: palette.smoke[11],
+  },
+  inputRowIcon: {
+    padding: 6,
   },
   baseUrlError: {
     color: palette.ember[9],

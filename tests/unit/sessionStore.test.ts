@@ -198,4 +198,155 @@ describe("sessionStore", () => {
       "msg-latest",
     ])
   })
+
+  it("renameSession persists via SDK and updates store on success", async () => {
+    const session = createSession()
+    const renamed = { ...session, title: "Renamed" }
+    const update = jest.fn(async () => ({ data: renamed }))
+    const client = { session: { update } } as unknown as OpencodeClient
+
+    useSessionStore.setState({
+      client,
+      sessions: [session],
+      currentSession: session,
+      currentServer: {
+        id: "prod",
+        label: "Prod",
+        baseUrl: "https://api.opencode.ai",
+        directory: "/repo",
+        basicAuth: "",
+      },
+    })
+
+    const ok = await useSessionStore.getState().renameSession(session.id, "Renamed")
+
+    expect(ok).toBe(true)
+    expect(update).toHaveBeenCalledWith({
+      sessionID: session.id,
+      directory: session.directory,
+      title: "Renamed",
+    })
+    expect(useSessionStore.getState().sessions[0].title).toBe("Renamed")
+    expect(useSessionStore.getState().currentSession?.title).toBe("Renamed")
+  })
+
+  it("renameSession sends the target session's directory even when a different session is current", async () => {
+    const target: Session = {
+      ...createSession(),
+      id: "session-other",
+      directory: "/other-worktree",
+      title: "Other",
+    }
+    const current: Session = {
+      ...createSession(),
+      id: "session-current",
+      directory: "/main-worktree",
+      title: "Main",
+    }
+    const renamed = { ...target, title: "Renamed" }
+    const update = jest.fn(async () => ({ data: renamed }))
+    const client = { session: { update } } as unknown as OpencodeClient
+
+    useSessionStore.setState({
+      client,
+      sessions: [current, target],
+      currentSession: current,
+      currentServer: {
+        id: "prod",
+        label: "Prod",
+        baseUrl: "https://api.opencode.ai",
+        directory: "/server-dir",
+        basicAuth: "",
+      },
+    })
+
+    await useSessionStore.getState().renameSession(target.id, "Renamed")
+
+    expect(update).toHaveBeenCalledWith({
+      sessionID: target.id,
+      directory: target.directory,
+      title: "Renamed",
+    })
+  })
+
+  it("renameSession rolls back the optimistic update on SDK error", async () => {
+    const session = createSession()
+    const update = jest.fn(async () => {
+      throw new Error("boom")
+    })
+    const client = { session: { update } } as unknown as OpencodeClient
+
+    useSessionStore.setState({
+      client,
+      sessions: [session],
+      currentSession: session,
+      currentServer: {
+        id: "prod",
+        label: "Prod",
+        baseUrl: "https://api.opencode.ai",
+        directory: "/repo",
+        basicAuth: "",
+      },
+    })
+
+    const ok = await useSessionStore.getState().renameSession(session.id, "Nope")
+
+    expect(ok).toBe(false)
+    // Title rolled back to original.
+    expect(useSessionStore.getState().sessions[0].title).toBe(session.title)
+    expect(useSessionStore.getState().currentSession?.title).toBe(session.title)
+    expect(useSessionStore.getState().lastError).toBe("boom")
+  })
+
+  it("cancelInflight bumps session scope so in-flight writes are dropped", async () => {
+    const before = useSessionStore.getState()._sessionScope
+    useSessionStore.getState().cancelInflight()
+    expect(useSessionStore.getState()._sessionScope).toBe(before + 1)
+    expect(useSessionStore.getState().isAgentWorking).toBe(false)
+  })
+
+  it("isProjectsLoading stays true while overlapping fetchProjects calls are in flight", async () => {
+    // Block the first call until we release it, then fire a second call so
+    // both fetches are concurrently in flight.
+    let release: (() => void) | undefined
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const list = jest
+      .fn()
+      .mockImplementationOnce(async () => {
+        await blocked
+        return { data: [] }
+      })
+      .mockImplementationOnce(async () => ({ data: [] }))
+    const client = { project: { list } } as unknown as OpencodeClient
+
+    useSessionStore.setState({
+      client,
+      currentServer: {
+        id: "prod",
+        label: "Prod",
+        baseUrl: "https://api.opencode.ai",
+        directory: "/repo",
+        basicAuth: "",
+      },
+    })
+
+    const first = useSessionStore.getState().fetchProjects()
+    const second = useSessionStore.getState().fetchProjects()
+
+    expect(useSessionStore.getState().isProjectsLoading).toBe(true)
+    expect(useSessionStore.getState()._projectsInflight).toBe(2)
+
+    await second
+    // The second call resolved synchronously — but the first is still blocked.
+    // A naive boolean would already be false here; with the counter it stays true.
+    expect(useSessionStore.getState().isProjectsLoading).toBe(true)
+    expect(useSessionStore.getState()._projectsInflight).toBe(1)
+
+    release?.()
+    await first
+    expect(useSessionStore.getState().isProjectsLoading).toBe(false)
+    expect(useSessionStore.getState()._projectsInflight).toBe(0)
+  })
 })

@@ -20,6 +20,7 @@ import type { Session } from "@opencode-ai/sdk/v2/client"
 import { palette } from "../constants/theme"
 import { PressableScale } from "../components/PressableScale"
 import { ErrorBanner } from "../components/ErrorBanner"
+import { ListSkeleton } from "../components/ListSkeleton"
 import * as Haptics from "expo-haptics"
 
 function relativeTime(timestamp: number): string {
@@ -42,10 +43,12 @@ export default function SessionsListScreen() {
   const currentProject = useSessionStore((state) => state.currentProject)
   const currentSession = useSessionStore((state) => state.currentSession)
   const sessions = useSessionStore((state) => state.sessions)
+  const isSessionsLoading = useSessionStore((state) => state.isSessionsLoading)
   const createSession = useSessionStore((state) => state.createSession)
   const fetchSessions = useSessionStore((state) => state.fetchSessions)
   const setSession = useSessionStore((state) => state.setSession)
   const deleteSession = useSessionStore((state) => state.deleteSession)
+  const renameSession = useSessionStore((state) => state.renameSession)
   const [refreshing, setRefreshing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -114,15 +117,10 @@ export default function SessionsListScreen() {
       "Rename session",
       undefined,
       (newTitle) => {
-        if (newTitle?.trim()) {
-          const updated = { ...session, title: newTitle.trim() }
-          // Optimistic local update
-          useSessionStore.setState((state) => ({
-            sessions: state.sessions.map((s) => (s.id === session.id ? updated : s)),
-            currentSession:
-              state.currentSession?.id === session.id ? updated : state.currentSession,
-          }))
-        }
+        const trimmed = newTitle?.trim()
+        if (!trimmed) return
+        // renameSession applies an optimistic update internally and rolls back on error.
+        void renameSession(session.id, trimmed)
       },
       "plain-text",
       session.title || ""
@@ -148,11 +146,19 @@ export default function SessionsListScreen() {
     )
   }
 
-  const renderRightActions = () => (
-    <View style={styles.swipeDeleteContainer}>
-      <Ionicons name="trash-outline" size={20} color={palette.smoke[12]} />
-    </View>
-  )
+  const renderDeleteAction = (session: Session, getRef: () => Swipeable | null) => {
+    const DeleteAction = () => (
+      <Pressable
+        style={styles.swipeDeleteContainer}
+        onPress={() => handleDeleteSession(session, getRef())}
+        accessibilityLabel={`Delete ${session.title || "Untitled session"}`}
+        accessibilityRole="button"
+      >
+        <Ionicons name="trash-outline" size={20} color={palette.smoke[12]} />
+      </Pressable>
+    )
+    return DeleteAction
+  }
 
   const projectName =
     currentProject?.name ??
@@ -219,6 +225,8 @@ export default function SessionsListScreen() {
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Select a project to view sessions.</Text>
         </View>
+      ) : isSessionsLoading && sessions.length === 0 ? (
+        <ListSkeleton rowHeight={56} count={6} />
       ) : sessions.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="chatbubbles-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />
@@ -244,34 +252,37 @@ export default function SessionsListScreen() {
           renderItem={({ item }: { item: Session }) => {
             const isActive = item.id === currentSession?.id
             let swipeableRef: Swipeable | null = null
+            const getRef = () => swipeableRef
             return (
-            <Swipeable
-              ref={(ref) => { swipeableRef = ref }}
-              renderRightActions={renderRightActions}
-              onSwipeableOpen={() => handleDeleteSession(item, swipeableRef)}
-              overshootRight={false}
-            >
-              <PressableScale
-                onPress={() => handleSelectSession(item.id)}
-                onLongPress={() => handleRenameSession(item)}
-                style={[styles.sessionItem, isActive && styles.sessionItemActive]}
-                accessibilityLabel={item.title || "Untitled session"}
-                accessibilityRole="button"
+              <Swipeable
+                ref={(ref) => { swipeableRef = ref }}
+                renderRightActions={renderDeleteAction(item, getRef)}
+                overshootRight={false}
+                friction={2}
+                rightThreshold={64}
               >
-                <View style={styles.sessionInfo}>
-                  <View style={styles.sessionTitleRow}>
-                    {isActive && <View style={styles.activeDot} />}
-                    <Text style={styles.sessionTitle} numberOfLines={1}>
-                      {item.title || "Untitled session"}
+                <PressableScale
+                  onPress={() => handleSelectSession(item.id)}
+                  onLongPress={() => handleRenameSession(item)}
+                  style={[styles.sessionItem, isActive && styles.sessionItemActive]}
+                  accessibilityLabel={item.title || "Untitled session"}
+                  accessibilityRole="button"
+                  accessibilityHint="Long-press to rename. Swipe left to delete."
+                >
+                  <View style={styles.sessionInfo}>
+                    <View style={styles.sessionTitleRow}>
+                      {isActive && <View style={styles.activeDot} />}
+                      <Text style={styles.sessionTitle} numberOfLines={1}>
+                        {item.title || "Untitled session"}
+                      </Text>
+                    </View>
+                    <Text style={styles.sessionTime}>
+                      {relativeTime(item.time.updated)}
                     </Text>
                   </View>
-                  <Text style={styles.sessionTime}>
-                    {relativeTime(item.time.updated)}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
-              </PressableScale>
-            </Swipeable>
+                  <Ionicons name="chevron-forward" size={16} color={palette.smoke[6]} />
+                </PressableScale>
+              </Swipeable>
             )
           }}
         />

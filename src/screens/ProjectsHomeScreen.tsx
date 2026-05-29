@@ -13,6 +13,7 @@ import type { AppTabParamList } from "../navigation/AppTabs"
 import { palette } from "../constants/theme"
 import { PressableScale } from "../components/PressableScale"
 import { ErrorBanner } from "../components/ErrorBanner"
+import { ListSkeleton } from "../components/ListSkeleton"
 
 type ProjectsHomeNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<ProjectsStackParamList>,
@@ -24,6 +25,7 @@ export default function ProjectsHomeScreen() {
   const currentServer = useSessionStore((state) => state.currentServer)
   const currentProject = useSessionStore((state) => state.currentProject)
   const projects = useSessionStore((state) => state.projects)
+  const isProjectsLoading = useSessionStore((state) => state.isProjectsLoading)
   const servers = useSessionStore((state) => state.servers)
   const fetchProjects = useSessionStore((state) => state.fetchProjects)
   const selectProject = useSessionStore((state) => state.selectProject)
@@ -67,6 +69,8 @@ export default function ProjectsHomeScreen() {
             </Pressable>
           </View>
         </View>
+      ) : isProjectsLoading && projects.length === 0 ? (
+        <ListSkeleton rowHeight={56} count={5} />
       ) : projects.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="folder-open-outline" size={48} color={palette.smoke[5]} style={{ marginBottom: 12 }} />

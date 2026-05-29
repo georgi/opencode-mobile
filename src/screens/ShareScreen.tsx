@@ -5,16 +5,17 @@ import {
     StyleSheet,
     Switch,
     Share,
+    Alert,
     ActivityIndicator,
 } from "react-native"
 import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
 import { Ionicons } from "@expo/vector-icons"
 import * as Clipboard from "expo-clipboard"
+import * as Haptics from "expo-haptics"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import { colors, palette } from "../constants/theme"
-import { Pressable } from "react-native"
 import { PressableScale } from "../components/PressableScale"
 import { ErrorBanner } from "../components/ErrorBanner"
 
@@ -36,7 +37,7 @@ export default function ShareScreen() {
         }
     }, [])
 
-    const handleToggle = async (value: boolean) => {
+    const runToggle = async (value: boolean) => {
         if (!sessionId || isToggling) {
             return
         }
@@ -53,12 +54,36 @@ export default function ShareScreen() {
         }
     }
 
+    const handleToggle = (value: boolean) => {
+        if (!sessionId || isToggling) {
+            return
+        }
+        // Disabling sharing invalidates the link — confirm before doing so.
+        if (!value && shareUrl) {
+            Alert.alert(
+                "Stop sharing?",
+                "The current share link will stop working. Anyone you sent it to will lose access.",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                        text: "Stop sharing",
+                        style: "destructive",
+                        onPress: () => void runToggle(false),
+                    },
+                ]
+            )
+            return
+        }
+        void runToggle(value)
+    }
+
     const handleCopy = async () => {
         if (!shareUrl) {
             return
         }
 
         await Clipboard.setStringAsync(shareUrl)
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
         setCopied(true)
         if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
         copiedTimerRef.current = setTimeout(() => setCopied(false), 2000)
@@ -95,7 +120,7 @@ export default function ShareScreen() {
                     </View>
                     <Switch
                         value={isEnabled}
-                        onValueChange={(value) => void handleToggle(value)}
+                        onValueChange={handleToggle}
                         disabled={isToggling}
                     />
                 </View>
