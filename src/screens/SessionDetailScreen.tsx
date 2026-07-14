@@ -28,6 +28,7 @@ import { ErrorBanner } from "../components/ErrorBanner"
 import { PressableScale } from "../components/PressableScale"
 import * as Clipboard from "expo-clipboard"
 import * as Haptics from "expo-haptics"
+import { handleMarkdownLink } from "../utils/markdownLinks"
 
 const emptyParts: Part[] = []
 
@@ -330,7 +331,7 @@ const MessageRow = React.memo(function MessageRow({
       {segments.map((seg, i) => {
         if (seg.type === "text") {
           return (
-            <Markdown key={i} style={markdownStyles} rules={markdownRules}>
+            <Markdown key={i} style={markdownStyles} rules={markdownRules} onLinkPress={handleMarkdownLink}>
               {seg.text}
             </Markdown>
           )
@@ -722,6 +723,9 @@ export default function SessionDetailScreen() {
             </Text>
             <Text style={styles.emptyStateHint}>
               Type a message below to get started.
+            </Text>
+            <Text style={styles.emptyStateHint}>
+              Tip: long-press any message to copy it.
             </Text>
           </View>
         ) : (

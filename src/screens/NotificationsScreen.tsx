@@ -138,6 +138,11 @@ export default function NotificationsScreen() {
                         ) : null}
                         <PressableScale
                             onPress={() => {
+                                // The local sessions list is scoped to whichever project
+                                // SessionsListScreen last loaded, so a same-project permission
+                                // can legitimately miss it on cold-start. Pre-populate
+                                // currentSession when we have it; otherwise navigate and let
+                                // SessionDetailScreen load the session from the route param.
                                 const found = sessions.find((s) => s.id === permission.sessionID)
                                 if (found) setSession(found)
                                 navigation.navigate("SessionDetail", {
@@ -145,6 +150,8 @@ export default function NotificationsScreen() {
                                 })
                             }}
                             hitSlop={8}
+                            accessibilityLabel="Open the session that requested this permission"
+                            accessibilityRole="button"
                         >
                             <Text style={styles.openSessionText}>Open Session</Text>
                         </PressableScale>

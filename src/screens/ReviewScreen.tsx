@@ -5,6 +5,8 @@ import { useRoute } from "@react-navigation/native"
 import type { RouteProp } from "@react-navigation/native"
 import { Ionicons } from "@expo/vector-icons"
 import * as Diff from "diff"
+import * as Clipboard from "expo-clipboard"
+import * as Haptics from "expo-haptics"
 import { useSessionStore } from "../store/sessionStore"
 import type { ProjectsStackParamList } from "../navigation/ProjectsStack"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
@@ -56,12 +58,24 @@ function FileAccordionItem({
     isExpanded: boolean
     onToggle: () => void
 }) {
+    const copyFilename = async () => {
+        await Clipboard.setStringAsync(diff.file)
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    }
+
     return (
         <View style={styles.accordionItem}>
-            <PressableScale onPress={onToggle} style={styles.accordionHeader}>
+            <PressableScale
+                onPress={onToggle}
+                onLongPress={() => void copyFilename()}
+                style={styles.accordionHeader}
+                accessibilityLabel={`${diff.file}, +${diff.additions} additions, -${diff.deletions} deletions`}
+                accessibilityRole="button"
+                accessibilityHint="Tap to expand. Long-press to copy file path."
+            >
                 <View style={styles.accordionHeaderLeft}>
                     <Text style={styles.accordionIcon}>{isExpanded ? "▼" : "▶"}</Text>
-                    <Text style={styles.accordionFilename} numberOfLines={1}>{diff.file}</Text>
+                    <Text style={styles.accordionFilename} numberOfLines={1} ellipsizeMode="middle">{diff.file}</Text>
                 </View>
                 <View style={styles.accordionStats}>
                     <Text style={styles.diffStatAdded}>+{diff.additions}</Text>
